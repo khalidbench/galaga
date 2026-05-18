@@ -3,6 +3,27 @@
 
 const PEER_PREFIX = 'tankbrawl-9f3a-';
 
+// ICE config: multiple STUN servers + free TURN relay so cross-network play
+// works through corporate firewalls and symmetric NAT.
+const ICE_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    // Open Relay TURN — free, no account needed
+    { urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject', credential: 'openrelayproject' },
+  ],
+};
+
+const PEER_OPTS = { debug: 0, config: ICE_CONFIG };
+const CONNECT_TIMEOUT_MS = 20000; // 20 s — TURN relay needs more time than STUN
+
 function genCode(len = 6) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let s = '';
@@ -45,7 +66,7 @@ export class Net {
     this.roomCode = genCode(6);
     return new Promise((resolve, reject) => {
       const id = peerId(this.roomCode);
-      this.peer = new Peer(id, { debug: 1 });
+      this.peer = new Peer(id, PEER_OPTS);
       this.myId = id;
       const fail = (err) => {
         this.onError(err.type === 'unavailable-id'
@@ -188,7 +209,7 @@ export class Net {
     this.isHost = false;
     this.roomCode = roomCode.toUpperCase();
     return new Promise((resolve, reject) => {
-      this.peer = new Peer(undefined, { debug: 1 });
+      this.peer = new Peer(undefined, PEER_OPTS);
       this.peer.on('open', (id) => {
         this.myId = id;
         const conn = this.peer.connect(peerId(this.roomCode), { reliable: true });
@@ -205,18 +226,26 @@ export class Net {
           this.onDisconnected('host');
         });
         conn.on('error', (err) => {
-          if (!opened) reject(err);
-        });
-        setTimeout(() => {
           if (!opened) {
-            reject(new Error('Could not connect to room — check the code'));
+            const msg = 'Connection failed — both players need an internet connection';
+            this.onError(msg); reject(new Error(msg));
           }
-        }, 8000);
+        });
+        // Give TURN relay enough time to negotiate (up to 20 s)
+        const t = setTimeout(() => {
+          if (!opened) {
+            const msg = 'Timed out — could not reach host. Check the code and try again.';
+            this.onError(msg); reject(new Error(msg));
+          }
+        }, CONNECT_TIMEOUT_MS);
+        conn.on('open', () => clearTimeout(t));
       });
       this.peer.on('error', (err) => {
-        const msg = err.type === 'peer-unavailable'
-          ? 'Room not found — check the code'
-          : (err.message || 'Network error');
+        const msg =
+          err.type === 'peer-unavailable' ? 'Room not found — check the code' :
+          err.type === 'network'          ? 'Network error — check your internet connection' :
+          err.type === 'server-error'     ? 'Signalling server unreachable — try again in a moment' :
+          (err.message || 'Connection error');
         this.onError(msg);
         reject(new Error(msg));
       });
