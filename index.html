@@ -1,114 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GO TANKERS</title>
-  <link rel="stylesheet" href="./style.css" />
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GALAGA</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Screen: enter name -->
-  <div id="screen-name" class="screen active">
-    <div class="panel">
-      <h1>GO TANKERS</h1>
-      <p class="subtitle">Top-down team tank arena</p>
-      <label for="name-input">Your display name</label>
-      <input id="name-input" type="text" maxlength="16" placeholder="e.g. Iron Maverick" autocomplete="off" />
-      <button id="name-continue">Continue</button>
-      <p class="hint">Max 16 characters. Saved locally for next time.</p>
+  <div id="game-container">
+    <canvas id="gameCanvas" width="448" height="512"></canvas>
+    <div id="touch-controls" style="display:none;">
+      <button id="btn-left" class="touch-btn">◀</button>
+      <button id="btn-fire" class="touch-btn fire-btn">●</button>
+      <button id="btn-right" class="touch-btn">▶</button>
     </div>
   </div>
-
-  <!-- Screen: choose create or join -->
-  <div id="screen-mode" class="screen">
-    <div class="panel">
-      <h2>Hello, <span id="mode-name"></span></h2>
-      <button id="btn-create">Create Room</button>
-      <button id="btn-join">Join Room</button>
-      <button class="ghost" id="btn-back-name">Change name</button>
-    </div>
-  </div>
-
-  <!-- Screen: join room -->
-  <div id="screen-join" class="screen">
-    <div class="panel">
-      <h2>Join Room</h2>
-      <label for="room-input">Room code</label>
-      <input id="room-input" type="text" maxlength="8" placeholder="ABC123" autocomplete="off" />
-      <button id="btn-join-go">Join</button>
-      <button class="ghost" id="btn-back-mode">Back</button>
-      <p id="join-error" class="error"></p>
-    </div>
-  </div>
-
-  <!-- Screen: lobby -->
-  <div id="screen-lobby" class="screen">
-    <div class="panel wide">
-      <h2>Lobby</h2>
-      <div class="room-code-row">
-        <span>Room code:</span>
-        <code id="room-code-display">------</code>
-        <button id="copy-code" class="small">Copy</button>
-      </div>
-      <p class="hint" id="lobby-status">Connecting...</p>
-
-      <div class="teams">
-        <div class="team team-blue">
-          <h3>Blue Team</h3>
-          <ul id="list-blue"></ul>
-        </div>
-        <div class="team team-red">
-          <h3>Red Team</h3>
-          <ul id="list-red"></ul>
-        </div>
-      </div>
-
-      <div class="lobby-actions">
-        <button id="btn-team-blue">Join Blue</button>
-        <button id="btn-team-red">Join Red</button>
-        <button id="btn-start" disabled>Start Match</button>
-      </div>
-      <p class="hint" id="host-hint"></p>
-    </div>
-  </div>
-
-  <!-- Screen: in-game -->
-  <div id="screen-game" class="screen">
-    <canvas id="game-canvas" width="1280" height="720"></canvas>
-    <div id="pickup-notify" aria-live="polite"></div>
-    <div id="hud">
-      <div class="hud-top">
-        <div class="score blue"><span class="lbl">BLUE</span><span id="score-blue">0</span></div>
-        <div id="match-timer">10:00</div>
-        <div class="score red"><span class="lbl">RED</span><span id="score-red">0</span></div>
-      </div>
-      <div class="hud-bottom">
-        <div id="hp-wrap">
-          <div id="hp-label">HP</div>
-          <div id="hp-bar"><div id="hp-fill"></div></div>
-        </div>
-        <div id="buffs"></div>
-        <button id="mute-toggle" class="icon-btn" title="Mute">🔊</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Screen: end -->
-  <div id="screen-end" class="screen">
-    <div class="panel wide">
-      <h2 id="end-title">Match Over</h2>
-      <p id="end-subtitle"></p>
-      <table id="end-stats">
-        <thead>
-          <tr><th>Player</th><th>Team</th><th>Kills</th><th>Deaths</th></tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-      <button id="btn-rematch">Back to Lobby</button>
-    </div>
-  </div>
-
-  <script type="module" src="./game.js"></script>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>
