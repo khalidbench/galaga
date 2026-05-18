@@ -55,30 +55,17 @@ const INFRA_BLOCKS = [
   { id: 'ROCKETES',   x: 880, y: 543, w: 100, h: 54, pickup: 'ROCKETES',   color: '#ff4ed4', label: 'ROCKET ES',  px: 930, py: 513 },
 ];
 
-// Extra cover walls in the corridors between blocks — keep navigation interesting.
-// Corridors: col1-col2 at x 400-590, col2-col3 at x 690-880, approaches x <300 and x >980.
+// Four light barriers — just enough cover to break line-of-sight, map stays open.
 const COVER_WALLS = [
-  // Approach barriers flanking each base — create a chokepoint entering the grid
-  { x: 200, y: 195, w: 20, h: 110 },
-  { x: 200, y: 415, w: 20, h: 110 },
-  { x: WORLD_W - 220, y: 195, w: 20, h: 110 },
-  { x: WORLD_W - 220, y: 415, w: 20, h: 110 },
-  // Col1↔Col2 corridor — small pillars in the inter-row gaps
-  { x: 474, y: 238, w: 20, h: 70 },   // between row 1 and row 2
-  { x: 474, y: 432, w: 20, h: 70 },   // between row 2 and row 3
-  // Col2↔Col3 corridor — mirror
-  { x: 786, y: 238, w: 20, h: 70 },
-  { x: 786, y: 432, w: 20, h: 70 },
-  // Top & bottom lane walls — narrow the open flanks
-  { x: 560, y: 58,  w: 160, h: 18 },
-  { x: 560, y: 644, w: 160, h: 18 },
+  { x: 200, y: 290, w: 22, h: 140 },               // blue-side central barrier
+  { x: WORLD_W - 222, y: 290, w: 22, h: 140 },     // red-side mirror
+  { x: 570, y: 160, w: 140, h: 22 },               // top mid crossbar
+  { x: 570, y: 538, w: 140, h: 22 },               // bottom mid crossbar
 ];
 
-// All collision geometry: infra blocks + cover walls.
-const WALLS = [
-  ...INFRA_BLOCKS.map(b => ({ x: b.x, y: b.y, w: b.w, h: b.h })),
-  ...COVER_WALLS,
-];
+// Infra blocks are DRIVE-THROUGH zones — not solid walls.
+// Only the cover walls block movement.
+const WALLS = [...COVER_WALLS];
 
 // Network topology connections (pairs of INFRA_BLOCKS indices) drawn as cables.
 const BLOCK_CONNECTIONS = [
@@ -187,13 +174,13 @@ let host = null;
 function newHostState() {
   // Each infrastructure block owns exactly one pickup that respawns there.
   const blockPickups = INFRA_BLOCKS.map((b, i) => ({
-    blockId: b.id,
-    type:    b.pickup,
-    x:       b.px,
-    y:       b.py,
-    active:  true,        // visible and collectible
-    respawnAt: 0,         // when active=false, the game-clock time to respawn
-    id:      i + 1,       // unique id for rendering
+    blockId:   b.id,
+    type:      b.pickup,
+    x:         b.x + b.w / 2,   // centre of the zone
+    y:         b.y + b.h / 2,
+    active:    true,
+    respawnAt: 0,
+    id:        i + 1,
   }));
   return {
     tanks: new Map(),
@@ -542,18 +529,22 @@ function hostTick(dt, now) {
   }
   host.bullets = remainingBullets;
 
-  // Per-block pickup respawn and collection
+  // Per-block pickup respawn and collection.
+  // Collection triggers when the tank drives INTO the block zone (no need to hit a point).
   for (const bp of host.blockPickups) {
     if (!bp.active) {
       if (now >= bp.respawnAt) { bp.active = true; bp.id = host.nextPickupId++; }
       continue;
     }
+    const blk = INFRA_BLOCKS.find(b => b.id === bp.blockId);
+    if (!blk) continue;
     for (const t of host.tanks.values()) {
       if (!t.alive) continue;
-      const dx = t.x - bp.x, dy = t.y - bp.y;
-      if (dx * dx + dy * dy < (TANK_R + 16) * (TANK_R + 16)) {
+      // Tank centre overlaps the block rectangle (with a small margin = TANK_R)
+      if (t.x > blk.x - TANK_R && t.x < blk.x + blk.w + TANK_R &&
+          t.y > blk.y - TANK_R && t.y < blk.y + blk.h + TANK_R) {
         applyPickupHost(t, bp.type, now);
-        pushEvent({ k: 'pickup', x: bp.x, y: bp.y, t: bp.type, pid: t.id });
+        pushEvent({ k: 'pickup', x: t.x, y: t.y, t: bp.type, pid: t.id });
         bp.active = false;
         bp.respawnAt = now + PICKUP_INTERVAL;
         break;
@@ -956,8 +947,11 @@ function render(now) {
   // Network cable connections between blocks
   drawNetworkLines(ctx, now);
 
-  // Infrastructure blocks
-  for (const b of INFRA_BLOCKS) drawInfraBlock(ctx, b, now);
+  // Infrastructure station zones (drive-through floor panels)
+  for (const b of INFRA_BLOCKS) {
+    const isActive = view.pickups.some(p => p.t === b.pickup);
+    drawInfraZone(ctx, b, isActive, now);
+  }
 
   // Cover walls — simple concrete barriers between blocks
   for (const w of COVER_WALLS) {
@@ -1059,47 +1053,51 @@ function drawNetworkLines(ctx, now) {
   ctx.restore();
 }
 
-function drawInfraBlock(ctx, block, now) {
+function drawInfraZone(ctx, block, isActive, now) {
   const { x, y, w, h, color, label } = block;
   ctx.save();
-  // Outer glow on border
-  ctx.shadowColor = color;
-  ctx.shadowBlur = 10;
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-  ctx.shadowBlur = 0;
 
-  // Dark body
-  ctx.fillStyle = 'rgba(7,13,30,0.92)';
-  ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
-
-  // Coloured top status bar
-  ctx.fillStyle = color + '30';
-  ctx.fillRect(x + 1, y + 1, w - 2, 14);
+  // Floor fill — bright when bonus available, dim when recharging
+  ctx.globalAlpha = isActive ? 0.22 : 0.07;
   ctx.fillStyle = color;
-  ctx.fillRect(x + 1, y + 1, w - 2, 3);
+  ctx.fillRect(x, y, w, h);
+  ctx.globalAlpha = 1;
 
-  // Server rack lines
-  ctx.strokeStyle = color + '25';
-  ctx.lineWidth = 1;
-  for (let ry = y + 20; ry < y + h - 6; ry += 9) {
-    ctx.beginPath(); ctx.moveTo(x + 8, ry); ctx.lineTo(x + w - 8, ry); ctx.stroke();
+  // Border — pulsing glow when active, dashed when recharging
+  if (isActive) {
+    const pulse = 0.55 + 0.35 * Math.sin(now * 5);
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = pulse;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+  } else {
+    ctx.strokeStyle = color + '40';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 5]);
+    ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    ctx.setLineDash([]);
   }
 
-  // Blinking LEDs
-  const blink = Math.sin(now * 3.5 + x * 0.03) > 0;
-  ctx.fillStyle = blink ? '#5be38a' : color;
-  ctx.beginPath(); ctx.arc(x + w - 9, y + 8, 3, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = (Math.sin(now * 2 + y * 0.04) > 0) ? color : '#555';
-  ctx.beginPath(); ctx.arc(x + w - 18, y + 8, 3, 0, Math.PI * 2); ctx.fill();
+  // Corner tick marks so the zone reads clearly even when dim
+  const tick = 10, lw = 2;
+  ctx.strokeStyle = color + (isActive ? 'cc' : '50');
+  ctx.lineWidth = lw;
+  [[x,y],[x+w,y],[x,y+h],[x+w,y+h]].forEach(([cx,cy],i) => {
+    const sx = i % 2 === 0 ? 1 : -1, sy = i < 2 ? 1 : -1;
+    ctx.beginPath(); ctx.moveTo(cx + sx*tick, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + sy*tick); ctx.stroke();
+  });
 
   // Label
-  ctx.fillStyle = '#e8f0ff';
-  ctx.font = 'bold 11px Menlo, monospace';
+  ctx.fillStyle = isActive ? color : color + '55';
+  ctx.font = `bold ${isActive ? 12 : 10}px Menlo, monospace`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(label, x + w / 2 - 6, y + h / 2 + 5);
+  ctx.fillText(label, x + w / 2, y + h / 2);
+
   ctx.restore();
 }
 
