@@ -4,7 +4,7 @@
 import { audio } from './audio.js';
 import { Net } from './network.js';
 import {
-  PICKUP_TYPES, applyPickup,
+  PICKUP_TYPES, PICKUP_LIST, randomPickupType, applyPickup,
   newBuffsState, pickupIndex,
 } from './pickups.js';
 
@@ -25,7 +25,12 @@ const MQ_FIRE_GAP = 0.12;
 const RESPAWN_TIME = 7;
 const MATCH_DURATION = 300; // 5 minutes
 const MATCH_KILL_LIMIT = 20;
-const PICKUP_INTERVAL = 25;
+const PICKUP_INTERVAL = 25; // unused — replaced by zone system below
+// Random bonus zone system
+const MAX_ZONES       = 2;   // at most 2 live zones at once
+const ZONE_LIFESPAN   = 18;  // seconds a zone stays before vanishing
+const ZONE_SPAWN_GAP  = 7;   // seconds between new zone attempts
+const ZONE_RADIUS     = 34;  // collection + visual radius
 const TURRET_RANGE = 240;
 const TURRET_FIRE_COOLDOWN = 0.7;
 const NAME_KEY = 'tankbrawl.name';
@@ -141,6 +146,30 @@ function findSafeSpot(tanks) {
   return { x: WORLD_W / 2, y: WORLD_H / 2 };
 }
 
+function findZoneSpot(tanks, existingZones) {
+  for (let i = 0; i < 120; i++) {
+    const x = 140 + Math.random() * (WORLD_W - 280);
+    const y = 100 + Math.random() * (WORLD_H - 200);
+    if (tankBlocked(x, y)) continue;
+    // Stay away from active tanks
+    let ok = true;
+    for (const t of tanks.values()) {
+      if (!t.alive) continue;
+      if (Math.hypot(t.x - x, t.y - y) < 100) { ok = false; break; }
+    }
+    if (!ok) continue;
+    // Stay well away from other zones so they don't cluster
+    for (const z of existingZones) {
+      if (Math.hypot(z.x - x, z.y - y) < 200) { ok = false; break; }
+    }
+    // Stay away from the team bases
+    if (Math.hypot(BASE_BLUE.x - x, BASE_BLUE.y - y) < 130) continue;
+    if (Math.hypot(BASE_RED.x - x, BASE_RED.y - y) < 130) continue;
+    if (ok) return { x, y };
+  }
+  return { x: WORLD_W / 2, y: WORLD_H / 2 };
+}
+
 function pickSpawnPoint(team, tanks) {
   const candidates = SPAWN_POINTS[team] || [];
   const sorted = candidates
@@ -172,24 +201,15 @@ let myTeam = null;
 // Host-only authoritative state
 let host = null;
 function newHostState() {
-  // Each infrastructure block owns exactly one pickup that respawns there.
-  const blockPickups = INFRA_BLOCKS.map((b, i) => ({
-    blockId:   b.id,
-    type:      b.pickup,
-    x:         b.x + b.w / 2,   // centre of the zone
-    y:         b.y + b.h / 2,
-    active:    true,
-    respawnAt: 0,
-    id:        i + 1,
-  }));
   return {
     tanks: new Map(),
     bullets: [],
-    blockPickups,         // one entry per INFRA_BLOCKS element
+    bonusZones:  [],   // [{id, x, y, type, expiresAt}]  — at most MAX_ZONES
+    nextZoneAt:  3,    // spawn first zone 3 s after match start (relative seconds)
+    nextZoneId:  1,
     turrets: [],
     inputs: new Map(),
     nextBulletId: 1,
-    nextPickupId: INFRA_BLOCKS.length + 1,
     matchStart: 0,
     matchEnd: 0,
     scores: { blue: 0, red: 0 },
@@ -380,7 +400,7 @@ function startMatchAsHost() {
   const now = performance.now() / 1000;
   host.matchStart = now;
   host.matchEnd = now + MATCH_DURATION;
-  host.nextPickupAt = now + 8; // first pickup a bit later
+  host.nextZoneAt = 4; // relative seconds after matchStart before first zone
   host.lastTick = now;
   host.lastSnapshot = now;
 
@@ -529,28 +549,36 @@ function hostTick(dt, now) {
   }
   host.bullets = remainingBullets;
 
-  // Per-block pickup respawn and collection.
-  // Collection triggers when the tank drives INTO the block zone (no need to hit a point).
-  for (const bp of host.blockPickups) {
-    if (!bp.active) {
-      if (now >= bp.respawnAt) { bp.active = true; bp.id = host.nextPickupId++; }
-      continue;
-    }
-    const blk = INFRA_BLOCKS.find(b => b.id === bp.blockId);
-    if (!blk) continue;
+  // ── Random bonus zones ──────────────────────────────────────────────────
+  // Spawn a new zone if we're below the cap and the timer is up.
+  const relNow = now - host.matchStart;
+  if (host.bonusZones.length < MAX_ZONES && relNow >= host.nextZoneAt) {
+    const sp = findZoneSpot(host.tanks, host.bonusZones);
+    const type = randomPickupType();
+    host.bonusZones.push({ id: host.nextZoneId++, x: sp.x, y: sp.y, type: type.id, expiresAt: now + ZONE_LIFESPAN });
+    host.nextZoneAt = relNow + ZONE_SPAWN_GAP;
+    pushEvent({ k: 'zoneSpawn', x: sp.x, y: sp.y });
+  }
+
+  // Expire old zones + check collection
+  const livingZones = [];
+  for (const z of host.bonusZones) {
+    if (now >= z.expiresAt) { pushEvent({ k: 'zoneExpire', x: z.x, y: z.y }); continue; }
+    let collected = false;
     for (const t of host.tanks.values()) {
       if (!t.alive) continue;
-      // Tank centre overlaps the block rectangle (with a small margin = TANK_R)
-      if (t.x > blk.x - TANK_R && t.x < blk.x + blk.w + TANK_R &&
-          t.y > blk.y - TANK_R && t.y < blk.y + blk.h + TANK_R) {
-        applyPickupHost(t, bp.type, now);
-        pushEvent({ k: 'pickup', x: t.x, y: t.y, t: bp.type, pid: t.id });
-        bp.active = false;
-        bp.respawnAt = now + PICKUP_INTERVAL;
-        break;
+      const dx = t.x - z.x, dy = t.y - z.y;
+      if (dx * dx + dy * dy < (TANK_R + ZONE_RADIUS) ** 2) {
+        applyPickupHost(t, z.type, now);
+        pushEvent({ k: 'pickup', x: z.x, y: z.y, t: z.type, pid: t.id });
+        // Immediately schedule next zone sooner after a collect
+        host.nextZoneAt = Math.min(host.nextZoneAt, relNow + 4);
+        collected = true; break;
       }
     }
+    if (!collected) livingZones.push(z);
   }
+  host.bonusZones = livingZones;
 
   // Turret AI
   const liveTurrets = [];
@@ -702,7 +730,7 @@ function buildSnapshot(now) {
       vx: b.vx, vy: b.vy,
       team: b.team, big: b.big,
     })),
-    pickups: host.blockPickups.filter(bp => bp.active).map(bp => ({ id: bp.id, x: bp.x, y: bp.y, t: bp.type })),
+    pickups: host.bonusZones.map(z => ({ id: z.id, x: z.x, y: z.y, t: z.type, expiresIn: Math.max(0, z.expiresAt - now) })),
     turrets: host.turrets.map(tu => ({
       x: tu.x, y: tu.y, team: tu.team,
       expiresIn: Math.max(0, tu.expiresAt - now),
@@ -947,11 +975,8 @@ function render(now) {
   // Network cable connections between blocks
   drawNetworkLines(ctx, now);
 
-  // Infrastructure station zones (drive-through floor panels)
-  for (const b of INFRA_BLOCKS) {
-    const isActive = view.pickups.some(p => p.t === b.pickup);
-    drawInfraZone(ctx, b, isActive, now);
-  }
+  // Infrastructure labels — subtle background decoration only
+  for (const b of INFRA_BLOCKS) drawInfraZone(ctx, b, now);
 
   // Cover walls — simple concrete barriers between blocks
   for (const w of COVER_WALLS) {
@@ -1053,51 +1078,24 @@ function drawNetworkLines(ctx, now) {
   ctx.restore();
 }
 
-function drawInfraZone(ctx, block, isActive, now) {
+function drawInfraZone(ctx, block, now) {
   const { x, y, w, h, color, label } = block;
   ctx.save();
-
-  // Floor fill — bright when bonus available, dim when recharging
-  ctx.globalAlpha = isActive ? 0.22 : 0.07;
+  // Very faint floor tint — purely decorative, does not affect gameplay
+  ctx.globalAlpha = 0.06;
   ctx.fillStyle = color;
   ctx.fillRect(x, y, w, h);
   ctx.globalAlpha = 1;
-
-  // Border — pulsing glow when active, dashed when recharging
-  if (isActive) {
-    const pulse = 0.55 + 0.35 * Math.sin(now * 5);
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 12;
-    ctx.strokeStyle = color;
-    ctx.globalAlpha = pulse;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
-    ctx.globalAlpha = 1;
-    ctx.shadowBlur = 0;
-  } else {
-    ctx.strokeStyle = color + '40';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([5, 5]);
-    ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
-    ctx.setLineDash([]);
-  }
-
-  // Corner tick marks so the zone reads clearly even when dim
-  const tick = 10, lw = 2;
-  ctx.strokeStyle = color + (isActive ? 'cc' : '50');
-  ctx.lineWidth = lw;
-  [[x,y],[x+w,y],[x,y+h],[x+w,y+h]].forEach(([cx,cy],i) => {
-    const sx = i % 2 === 0 ? 1 : -1, sy = i < 2 ? 1 : -1;
-    ctx.beginPath(); ctx.moveTo(cx + sx*tick, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + sy*tick); ctx.stroke();
-  });
-
-  // Label
-  ctx.fillStyle = isActive ? color : color + '55';
-  ctx.font = `bold ${isActive ? 12 : 10}px Menlo, monospace`;
+  ctx.strokeStyle = color + '28';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 6]);
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+  ctx.setLineDash([]);
+  ctx.fillStyle = color + '40';
+  ctx.font = '9px Menlo, monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(label, x + w / 2, y + h / 2);
-
   ctx.restore();
 }
 
@@ -1154,35 +1152,66 @@ function drawDataCenter(ctx, cx, cy, color, label) {
 
 
 function drawPickup(ctx, p, now) {
-  const def = Object.values(PICKUP_TYPES).find(d => d.id === p.t);
-  const color = def ? def.color : '#fff';
-  const name = def ? def.name : p.t;
-  const bob = Math.sin(now * 3 + p.id) * 2;
+  const def = PICKUP_TYPES[p.t] || {};
+  const color = def.color || '#fff';
+  const name  = def.name  || p.t;
+  const extra = PICKUP_DESCRIPTIONS[p.t] || {};
+  const icon  = extra.icon || '★';
+  const r = ZONE_RADIUS;
+  const frac = Math.min(1, (p.expiresIn ?? ZONE_LIFESPAN) / ZONE_LIFESPAN);
+  const bob  = Math.sin(now * 2.2 + p.id * 1.7) * 4;
+
   ctx.save();
   ctx.translate(p.x, p.y + bob);
-  // Halo
-  const g = ctx.createRadialGradient(0, 0, 2, 0, 0, 28);
-  g.addColorStop(0, color + 'aa');
-  g.addColorStop(1, color + '00');
-  ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(0, 0, 28, 0, Math.PI * 2); ctx.fill();
-  // Diamond box
-  ctx.rotate(Math.PI / 4);
+
+  // Outer soft halo
+  const grd = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 2.4);
+  grd.addColorStop(0, color + '55');
+  grd.addColorStop(1, color + '00');
+  ctx.fillStyle = grd;
+  ctx.beginPath(); ctx.arc(0, 0, r * 2.4, 0, Math.PI * 2); ctx.fill();
+
+  // Filled floor circle
+  ctx.globalAlpha = 0.20;
   ctx.fillStyle = color;
-  ctx.fillRect(-12, -12, 24, 24);
-  ctx.strokeStyle = '#0a0f24';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(-12, -12, 24, 24);
-  ctx.rotate(-Math.PI / 4);
-  // Label
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 11px Menlo, monospace';
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+
+  // Pulse ring
+  const pulse = 0.45 + 0.4 * Math.sin(now * 5);
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = pulse;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(0, 0, r + 5, 0, Math.PI * 2); ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // Countdown arc (shrinks as zone expires)
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(0, 0, r, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
+  ctx.stroke();
+  ctx.lineCap = 'butt';
+
+  // Icon
+  ctx.font = 'bold 18px serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+  ctx.lineWidth = 4;
+  ctx.strokeText(icon, 0, -5);
+  ctx.fillStyle = '#fff';
+  ctx.fillText(icon, 0, -5);
+
+  // Name label
+  ctx.font = `bold 11px Menlo, monospace`;
+  ctx.strokeStyle = 'rgba(0,0,0,0.9)';
   ctx.lineWidth = 3;
-  ctx.strokeText(name, 0, 26);
-  ctx.fillText(name, 0, 26);
+  ctx.strokeText(name, 0, 10);
+  ctx.fillStyle = color;
+  ctx.fillText(name, 0, 10);
+
   ctx.restore();
 }
 
