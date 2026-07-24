@@ -32,8 +32,8 @@ export class BonusFly {
     this.y = -30;
 
     // Collision half-sizes (bigger than regular enemies)
-    this.hw = 16;
-    this.hh = 12;
+    this.hw = 20;
+    this.hh = 14;
 
     this.dead   = false;
     this.state  = 'diving'; // always diving — bonus flies never form up
@@ -103,11 +103,11 @@ export class BonusFly {
   draw(ctx) {
     if (this.dead) return;
 
-    // HP bar above label (only if damaged)
+    // HP bar above the name label (only if damaged)
     if (this.hp < this.maxHp) {
-      const bw = 30, bh = 3;
+      const bw = 34, bh = 4;
       const bx = this.x - bw / 2;
-      const by = this.y - 34;
+      const by = this.y - 50; // sits above the label pill (label top is y-40)
       ctx.fillStyle = '#333';
       ctx.fillRect(bx, by, bw, bh);
       ctx.fillStyle = this.color;

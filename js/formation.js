@@ -24,6 +24,10 @@ export class Formation {
     this.swayT = 0;
     this.swayDir = 1;
 
+    // Event queue drained by Game each frame for visual feedback
+    // (score pop-ups, TRIPLE! banners). Each: {type, x, y, pts, text, color}
+    this.events = [];
+
     this._diveTimer = 1.5 + Math.random();
     this._diveTimerMin = Math.max(0.6, 2.0 - stage * 0.08);
     this._diveTimerMax = Math.max(1.0, 3.5 - stage * 0.1);
@@ -168,9 +172,18 @@ export class Formation {
         if (e.dead || !b.isPlayer) continue;
         if (b.hits(e)) {
           b.dead = true;
+          const wasDiving = e.state === 'diving' || e.state === 'captureBeam';
           const pts = e.takeHit(b, this.audio,
             (boss) => this._onBossKilled(boss, player));
-          if (pts > 0) player.score += pts;
+          if (pts > 0) {
+            player.score += pts;
+            // Floating score pop-up for any diving kill
+            const color = e.type === EnemyType.BOSS ? '#0f0'
+                        : e.type === EnemyType.BUTTERFLY ? '#f66' : '#0cf';
+            this.events.push({ type: 'score', x: e.x, y: e.y, pts, color });
+            // Track escort-group triple kill
+            this._registerGroupKill(e, player);
+          }
         }
       }
     }
@@ -206,11 +219,11 @@ export class Formation {
     );
     if (eligible.length === 0) return;
 
-    // From stage 2 onward, 35% chance of a coordinated escort formation attack
+    // 50% chance of a coordinated escort formation attack (boss + 2 escorts)
     const bosses = eligible.filter(e => e.type === EnemyType.BOSS);
     const butterflies = eligible.filter(e => e.type === EnemyType.BUTTERFLY);
-    if (this.stage >= 2 && bosses.length > 0 && butterflies.length >= 2 &&
-        Math.random() < 0.35) {
+    if (bosses.length > 0 && butterflies.length >= 2 &&
+        Math.random() < 0.50) {
       this._startEscortAttack(bosses[0], butterflies, player);
       return;
     }
@@ -254,6 +267,12 @@ export class Formation {
       bf.escortBoss = boss;
     }
 
+    // Shared group so we can detect a full "triple kill" wipe of this dive
+    const group = { members: [boss, ...escorts], total: 1 + escorts.length,
+                    killed: 0, awarded: false };
+    boss.escortGroup = group;
+    for (const bf of escorts) bf.escortGroup = group;
+
     // Launch boss
     boss.startDive(basePts, this.audio);
 
@@ -268,6 +287,26 @@ export class Formation {
         delay: i * 0.08, // seconds
       };
     });
+  }
+
+  // Track kills within an escort group; award a big bonus + banner
+  // when the whole 3-ship dive is wiped out.
+  _registerGroupKill(e, player) {
+    const g = e.escortGroup;
+    if (!g || g.awarded) return;
+    g.killed++;
+    if (g.killed >= g.total) {
+      g.awarded = true;
+      const BONUS = 1500;
+      player.score += BONUS;
+      this.events.push({
+        type: 'banner',
+        x: e.x, y: e.y,
+        text: 'TRIPLE! +' + BONUS,
+        color: '#ff0',
+      });
+      this.audio.stageClear(); // celebratory jingle for the wipe
+    }
   }
 
   _startDiveRun(e, player) {

@@ -45,8 +45,8 @@ export class Game {
     this._deathTimer = 0;
     this._respawnReady = false;
 
-    // Bonus fly spawn: one every 30-50s, once formation is entered
-    this._bonusFlyTimer = 35 + Math.random() * 15;
+    // Bonus fly spawn: first appears quickly, then every 8-15s
+    this._bonusFlyTimer = 5 + Math.random() * 3;
     this._bonusFlyPool = shuffle([...BONUS_FLIES]); // randomised order
     this._bonusFlyIdx  = 0;
 
@@ -138,7 +138,7 @@ export class Game {
     this.player = new Player(this.audio);
     this.bonusFlies = [];
     this._scorePops = [];
-    this._bonusFlyTimer = 35 + Math.random() * 15;
+    this._bonusFlyTimer = 5 + Math.random() * 3;
     this._bonusFlyPool  = shuffle([...BONUS_FLIES]);
     this._bonusFlyIdx   = 0;
     this._startStage();
@@ -165,6 +165,21 @@ export class Game {
     this.player.update(dt, this.input);
     this.formation.update(dt, this.player, this.stage);
 
+    // Drain formation feedback events (score pops + triple-kill banners)
+    for (const ev of this.formation.events) {
+      if (ev.type === 'score') {
+        this._scorePops.push({ x: ev.x, y: ev.y, pts: ev.pts, timer: 1.2, color: ev.color });
+      } else if (ev.type === 'banner') {
+        this._scorePops.push({ x: ev.x, y: ev.y, text: ev.text, timer: 2.0, color: ev.color, big: true });
+      }
+    }
+    this.formation.events.length = 0;
+    // Keep high score fresh if formation kills pushed us over
+    if (this.player.score > this.highScore) {
+      this.highScore = this.player.score;
+      localStorage.setItem('gal_hi', this.highScore);
+    }
+
     // Bonus fly spawn timer (only after formation has entered)
     if (this.formation.allEntered()) {
       this._bonusFlyTimer -= dt;
@@ -172,7 +187,7 @@ export class Game {
         const def = this._bonusFlyPool[this._bonusFlyIdx % this._bonusFlyPool.length];
         this._bonusFlyIdx++;
         this.bonusFlies.push(new BonusFly(def));
-        this._bonusFlyTimer = 30 + Math.random() * 20;
+        this._bonusFlyTimer = 8 + Math.random() * 7;
       }
     }
 
@@ -240,17 +255,29 @@ export class Game {
 
   _renderScorePops(ctx) {
     ctx.save();
-    ctx.font = 'bold 8px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
     for (const p of this._scorePops) {
       const fade = Math.min(1, p.timer / 0.4);
       ctx.globalAlpha = fade;
-      ctx.fillStyle = p.color;
-      // Float upward as timer counts down
-      const yOff = (1.2 - p.timer) * 30;
-      ctx.fillText('+' + p.pts, p.x, p.y - yOff);
+
+      if (p.big) {
+        // Triple-kill banner — big, centred horizontally, glowing
+        const yOff = (2.0 - p.timer) * 24;
+        ctx.font = 'bold 16px "Press Start 2P", monospace';
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = p.color;
+        ctx.fillText(p.text, CANVAS_W / 2, Math.max(80, p.y - yOff));
+        ctx.shadowBlur = 0;
+      } else {
+        const yOff = (1.2 - p.timer) * 30;
+        ctx.font = 'bold 8px "Press Start 2P", monospace';
+        ctx.fillStyle = p.color;
+        ctx.fillText('+' + p.pts, p.x, p.y - yOff);
+      }
     }
     ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
     ctx.restore();
   }
 

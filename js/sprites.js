@@ -106,31 +106,31 @@ export function drawBonusFly(ctx, cx, cy, color, flashTimer) {
   // Wings (wide diamond shape)
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.moveTo(cx,      cy - 10); // top
-  ctx.lineTo(cx + 16, cy);      // right
-  ctx.lineTo(cx,      cy + 8);  // bottom
-  ctx.lineTo(cx - 16, cy);      // left
+  ctx.moveTo(cx,      cy - 13); // top
+  ctx.lineTo(cx + 20, cy);      // right
+  ctx.lineTo(cx,      cy + 10); // bottom
+  ctx.lineTo(cx - 20, cy);      // left
   ctx.closePath();
   ctx.fill();
 
   // Body centre
   ctx.fillStyle = '#fff';
   ctx.beginPath();
-  ctx.arc(cx, cy - 1, 5, 0, Math.PI * 2);
+  ctx.arc(cx, cy - 1, 6, 0, Math.PI * 2);
   ctx.fill();
 
   // Eye
   ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.arc(cx, cy - 1, 2, 0, Math.PI * 2);
+  ctx.arc(cx, cy - 1, 3, 0, Math.PI * 2);
   ctx.fill();
 
   // Glow ring
-  ctx.globalAlpha = (flashTimer > 0 ? 0.15 : 0.25);
+  ctx.globalAlpha = (flashTimer > 0 ? 0.15 : 0.3);
   ctx.strokeStyle = color;
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 22, 0, Math.PI * 2);
   ctx.stroke();
 
   ctx.restore();
@@ -139,23 +139,34 @@ export function drawBonusFly(ctx, cx, cy, color, flashTimer) {
 // Draw the name tag floating above the bonus fly
 export function drawBonusLabel(ctx, cx, cy, name, color) {
   ctx.save();
-  ctx.font = 'bold 7px "Press Start 2P", monospace';
+  ctx.font = 'bold 11px "Press Start 2P", monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
   // Background pill
-  const w = ctx.measureText(name).width + 8;
-  ctx.fillStyle = 'rgba(0,0,0,0.75)';
-  ctx.fillRect(cx - w / 2, cy - 26, w, 11);
+  const w = ctx.measureText(name).width + 14;
+  const h = 18;
+  const top = cy - 40;
+
+  // Keep the label on-screen horizontally
+  let lx = cx;
+  const halfW = w / 2;
+  if (lx - halfW < 2) lx = halfW + 2;
+  if (lx + halfW > 446) lx = 446 - halfW;
+
+  ctx.fillStyle = 'rgba(0,0,0,0.82)';
+  ctx.fillRect(lx - halfW, top, w, h);
 
   // Border
   ctx.strokeStyle = color;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(cx - w / 2, cy - 26, w, 11);
+  ctx.lineWidth = 2;
+  ctx.strokeRect(lx - halfW, top, w, h);
 
-  // Text
-  ctx.fillStyle = color;
-  ctx.fillText(name, cx, cy - 20);
+  // Text with subtle glow
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 6;
+  ctx.fillStyle = '#fff';
+  ctx.fillText(name, lx, top + h / 2 + 1);
   ctx.restore();
 }
 
