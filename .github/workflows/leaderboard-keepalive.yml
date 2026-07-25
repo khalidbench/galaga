@@ -1,0 +1,55 @@
+name: Leaderboard keepalive
+
+# Keeps the free jsonblob.com score store alive forever and backs the
+# scores up into the repo. If the store ever vanishes, recreates it from
+# the backup and points the game at the new store via leaderboard-config.json.
+on:
+  schedule:
+    - cron: '0 6 * * 1' # every Monday 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refresh store, back up scores, self-heal if store is gone
+        run: |
+          set -e
+          API=$(jq -r .api leaderboard-config.json)
+          echo "Store: $API"
+          DATA=$(curl -sf "$API" || true)
+
+          if [ -z "$DATA" ]; then
+            echo "Store unreachable — recreating from backup"
+            BACKUP=$(cat leaderboard-backup.json 2>/dev/null || echo '{"scores":[]}')
+            LOC=$(curl -sf -i -X POST https://jsonblob.com/api/jsonBlob \
+                    -H 'Content-Type: application/json' -d "$BACKUP" \
+                  | tr -d '\r' | grep -i '^location:' | awk '{print $2}')
+            if [ -z "$LOC" ]; then
+              echo "Could not recreate store" >&2
+              exit 1
+            fi
+            API="https://jsonblob.com$LOC"
+            echo "New store: $API"
+            DATA=$BACKUP
+          else
+            # Touch the blob so its inactivity clock resets
+            curl -sf -X PUT "$API" -H 'Content-Type: application/json' -d "$DATA" > /dev/null
+          fi
+
+          echo "$DATA" | jq . > leaderboard-backup.json
+          jq -n --arg api "$API" '{api:$api}' > leaderboard-config.json
+
+      - name: Commit backup (also keeps this schedule from being auto-disabled)
+        run: |
+          git config user.name "leaderboard-bot"
+          git config user.email "actions@users.noreply.github.com"
+          date -u +%FT%TZ > .github/keepalive
+          git add leaderboard-backup.json leaderboard-config.json .github/keepalive
+          git commit -m "Leaderboard keepalive + score backup" || exit 0
+          git push
