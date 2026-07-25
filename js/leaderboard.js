@@ -1,9 +1,17 @@
 // Shared team leaderboard — top 3 scores, persisted for everyone.
-// Backed by a free jsonblob.com store; falls back to localStorage
+// The store URL lives in leaderboard-config.json (repo root) so the
+// weekly keepalive GitHub Action can transparently repoint the game
+// if it ever has to recreate the store. Falls back to localStorage
 // when the network is unavailable so the game never blocks.
-const API = 'https://jsonblob.com/api/jsonBlob/019f99f1-1d65-7e38-8af1-714193384bd2';
+const DEFAULT_API = 'https://jsonblob.com/api/jsonBlob/019f99f1-1d65-7e38-8af1-714193384bd2';
 const LOCAL_KEY = 'gal_top3';
 const MAX_ENTRIES = 3;
+
+// Resolve the store URL once; DEFAULT_API covers local dev without the config
+const apiUrl = fetch('./leaderboard-config.json', { cache: 'no-store' })
+  .then(r => (r.ok ? r.json() : null))
+  .then(cfg => (cfg && cfg.api) ? cfg.api : DEFAULT_API)
+  .catch(() => DEFAULT_API);
 
 export class Leaderboard {
   constructor() {
@@ -42,6 +50,7 @@ export class Leaderboard {
     if (this.syncing) return;
     this.syncing = true;
     try {
+      const API = await apiUrl;
       const res = await fetch(API, { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
@@ -64,6 +73,7 @@ export class Leaderboard {
     this.top = this.top.slice(0, MAX_ENTRIES);
     this._saveLocal();
     try {
+      const API = await apiUrl;
       // Re-read remote first so we do not clobber a teammate's newer score
       const res = await fetch(API, { cache: 'no-store' });
       if (res.ok) {
@@ -71,7 +81,7 @@ export class Leaderboard {
         this._merge(data.scores || []);
         this._saveLocal();
       }
-      await fetch(API, {
+      await fetch(await apiUrl, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scores: this.top }),
