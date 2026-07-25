@@ -98,22 +98,21 @@ export class Player {
     }
   }
 
-  // Effective fire mode: a temporary powerup wins while active,
-  // otherwise the permanent bonus gun level applies.
-  _fireMode() {
-    if (this.powerup) return this.powerup;
-    if (this.gunLevel >= 3) return 'TRIPLE';
-    if (this.gunLevel === 2) return 'DOUBLE';
-    return 'SINGLE';
+  // Temporary powerups STACK on the permanent gun level — they never
+  // downgrade it. DOUBLE adds one barrel, TRIPLE adds two (cap 5).
+  // RAPID keeps the current barrels and adds hold-to-autofire.
+  _barrels() {
+    let n = Math.min(3, this.gunLevel);
+    if (this.powerup === 'DOUBLE') n += 1;
+    if (this.powerup === 'TRIPLE') n += 2;
+    return Math.min(5, n);
   }
 
   _maxBullets() {
-    switch (this._fireMode()) {
-      case 'RAPID':  return 8;
-      case 'TRIPLE': return 9;
-      case 'DOUBLE': return 6;
-      default:       return MAX_BULLETS;
-    }
+    const n = this._barrels();
+    let max = n === 1 ? MAX_BULLETS : n * 3;
+    if (this.powerup === 'RAPID') max = Math.max(max, 10);
+    return max;
   }
 
   _shoot() {
@@ -124,17 +123,26 @@ export class Player {
       b.vx = vx;
       this.bullets.push(b);
     };
-    const mode = this._fireMode();
-    if (mode === 'TRIPLE') {
-      // Fan of three: straight + two angled
-      spawn(this.x);
-      spawn(this.x - 4, -110);
-      spawn(this.x + 4, 110);
-    } else if (mode === 'DOUBLE' || (mode === 'RAPID' && this.gunLevel >= 2)) {
-      spawn(this.x - 5);
-      spawn(this.x + 5);
-    } else {
-      spawn(this.x);
+    switch (this._barrels()) {
+      case 1:
+        spawn(this.x);
+        break;
+      case 2:
+        spawn(this.x - 5); spawn(this.x + 5);
+        break;
+      case 3: // parallel pair + straight center... classic fan
+        spawn(this.x);
+        spawn(this.x - 4, -110); spawn(this.x + 4, 110);
+        break;
+      case 4: // parallel pair + angled fan
+        spawn(this.x - 5); spawn(this.x + 5);
+        spawn(this.x - 4, -110); spawn(this.x + 4, 110);
+        break;
+      default: // 5: center + inner fan + outer fan
+        spawn(this.x);
+        spawn(this.x - 4, -70);  spawn(this.x + 4, 70);
+        spawn(this.x - 6, -140); spawn(this.x + 6, 140);
+        break;
     }
     if (this.dual) spawn(this.x + 16);
   }
