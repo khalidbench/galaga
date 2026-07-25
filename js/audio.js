@@ -67,22 +67,24 @@ export class Audio {
     this._init();
     if (this._muted) return;
     const ctx = this._ctx;
-    // Noise burst for explosion
-    const bufSize = ctx.sampleRate * 0.4;
+    // Long loud noise burst — the crash must be unmissable
+    const bufSize = ctx.sampleRate * 0.8;
     const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
     const data = buf.getChannelData(0);
     for (let i = 0; i < bufSize; i++) data[i] = Math.random() * 2 - 1;
     const src = ctx.createBufferSource();
     src.buffer = buf;
     const g = ctx.createGain();
-    g.gain.setValueAtTime(0.6, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    g.gain.setValueAtTime(1.0, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
     src.connect(g);
     g.connect(this._masterGain);
     src.start(ctx.currentTime);
 
-    // Low rumble osc
-    this._play('sawtooth', 60, 150, 0.3, 0.4);
+    // Deep boom + descending scream layered under the noise
+    this._play('sine', 30, 120, 0.7, 0.9);
+    this._play('sawtooth', 40, 400, 0.6, 0.5);
+    this._play('square', 60, 900, 0.35, 0.35);
   }
 
   enemyDive() {

@@ -4,6 +4,7 @@ import { Stars } from './stars.js';
 import { Audio } from './audio.js';
 import { Input } from './input.js';
 import { BonusFly, BONUS_FLIES } from './bonusfly.js';
+import { Leaderboard } from './leaderboard.js';
 
 const CANVAS_W = 448;
 const CANVAS_H = 512;
@@ -19,6 +20,7 @@ const STATE = {
   PLAYING:    'playing',
   STAGE_CLEAR:'stage_clear',
   DEAD:       'dead',
+  ENTER_NAME: 'enter_name',
   GAME_OVER:  'game_over',
 };
 
@@ -57,6 +59,15 @@ export class Game {
 
     // Floating score pop-ups
     this._scorePops = [];
+
+    // Crash feedback: explosion particles, screen shake, white flash
+    this._particles = [];
+    this._shakeTimer = 0;
+    this._flashTimer = 0;
+
+    // Shared team leaderboard + name entry buffer
+    this.leaderboard = new Leaderboard();
+    this._nameInput = '';
   }
 
   // ── Main loop entry points ──────────────────────────────────────────────
@@ -70,14 +81,57 @@ export class Game {
       case STATE.PLAYING:     this._updatePlaying(dt); break;
       case STATE.STAGE_CLEAR: this._updateStageClear(dt); break;
       case STATE.DEAD:        this._updateDead(dt); break;
+      case STATE.ENTER_NAME:  this._updateEnterName(dt); break;
       case STATE.GAME_OVER:   this._updateGameOver(dt); break;
     }
+
+    this._updateCrashFX(dt);
+  }
+
+  // Explosion particles / shake / flash tick — runs in every state so the
+  // crash animation keeps playing through the DEAD pause.
+  _updateCrashFX(dt) {
+    if (this._shakeTimer > 0) this._shakeTimer -= dt;
+    if (this._flashTimer > 0) this._flashTimer -= dt;
+    for (const p of this._particles) {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 60 * dt; // slight gravity
+      p.life -= dt;
+    }
+    this._particles = this._particles.filter(p => p.life > 0);
+  }
+
+  _spawnExplosion(x, y) {
+    const colors = ['#fff', '#ff0', '#f80', '#f44', '#f44'];
+    for (let i = 0; i < 45; i++) {
+      const ang = Math.random() * Math.PI * 2;
+      const spd = 40 + Math.random() * 220;
+      this._particles.push({
+        x, y,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd,
+        life: 0.5 + Math.random() * 0.6,
+        maxLife: 1.1,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        size: 2 + Math.floor(Math.random() * 3),
+      });
+    }
+    this._shakeTimer = 0.5;
+    this._flashTimer = 0.18;
   }
 
   render(ctx) {
     ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    // Screen shake while the crash effect is active
+    ctx.save();
+    if (this._shakeTimer > 0) {
+      const mag = this._shakeTimer * 14;
+      ctx.translate((Math.random() - 0.5) * mag, (Math.random() - 0.5) * mag);
+    }
 
     this.stars.draw(ctx);
 
@@ -86,7 +140,27 @@ export class Game {
       case STATE.PLAYING:     this._renderPlaying(ctx); break;
       case STATE.STAGE_CLEAR: this._renderPlaying(ctx); this._renderStageClear(ctx); break;
       case STATE.DEAD:        this._renderPlaying(ctx); break;
+      case STATE.ENTER_NAME:  this._renderPlaying(ctx); this._renderEnterName(ctx); break;
       case STATE.GAME_OVER:   this._renderPlaying(ctx); this._renderGameOver(ctx); break;
+    }
+
+    this._renderCrashFX(ctx);
+    ctx.restore();
+  }
+
+  _renderCrashFX(ctx) {
+    for (const p of this._particles) {
+      ctx.globalAlpha = Math.min(1, p.life / 0.4);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+    // White flash right at the moment of impact
+    if (this._flashTimer > 0) {
+      ctx.globalAlpha = (this._flashTimer / 0.18) * 0.55;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(-20, -20, CANVAS_W + 40, CANVAS_H + 40);
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -115,7 +189,7 @@ export class Game {
     ctx.font = 'bold 14px "Press Start 2P", monospace';
     ctx.shadowColor = '#0f0';
     ctx.shadowBlur = 6;
-    ctx.fillText('INFRATASK FORCE', CANVAS_W / 2, 182);
+    ctx.fillText('INFRA TASK FORCE', CANVAS_W / 2, 182);
     ctx.shadowBlur = 0;
 
     ctx.fillStyle = '#0cf';
@@ -132,13 +206,31 @@ export class Game {
     // High score
     ctx.fillStyle = '#f80';
     ctx.font = '8px "Press Start 2P", monospace';
-    ctx.fillText('HI-SCORE  ' + this.highScore, CANVAS_W / 2, 300);
+    ctx.fillText('HI-SCORE  ' + this.highScore, CANVAS_W / 2, 292);
+
+    // Shared team leaderboard
+    ctx.fillStyle = '#0f0';
+    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.fillText('TOP INFRA SCORES', CANVAS_W / 2, 330);
+    ctx.font = '8px "Press Start 2P", monospace';
+    const medals = ['#ff0', '#ccc', '#c73'];
+    if (this.leaderboard.top.length === 0) {
+      ctx.fillStyle = '#666';
+      ctx.fillText('- NO SCORES YET -', CANVAS_W / 2, 352);
+    } else {
+      this.leaderboard.top.forEach((e, i) => {
+        ctx.fillStyle = medals[i] || '#fff';
+        const name = e.name.padEnd(8, ' ');
+        ctx.fillText((i + 1) + '. ' + name + ' ' + String(e.score).padStart(6, '0'),
+                     CANVAS_W / 2, 352 + i * 18);
+      });
+    }
 
     // Controls hint
     ctx.fillStyle = '#888';
     ctx.font = '7px "Press Start 2P", monospace';
-    ctx.fillText('MOVE: ◀ ▶   INFRA GUN: SPACE', CANVAS_W / 2, 360);
-    ctx.fillText('PAUSE: P   MUTE: M', CANVAS_W / 2, 376);
+    ctx.fillText('MOVE: ◀ ▶   INFRA GUN: SPACE', CANVAS_W / 2, 448);
+    ctx.fillText('PAUSE: P   MUTE: M', CANVAS_W / 2, 464);
 
     ctx.restore();
   }
@@ -229,6 +321,19 @@ export class Game {
               this.highScore = this.player.score;
               localStorage.setItem('gal_hi', this.highScore);
             }
+            // Killing a ticket fly upgrades the infra gun for a few seconds
+            const upgrades = [
+              { type: 'DOUBLE', label: 'DOUBLE GUN!' },
+              { type: 'RAPID',  label: 'RAPID FIRE!' },
+              { type: 'TRIPLE', label: 'TRIPLE GUN!' },
+            ];
+            const up = upgrades[Math.floor(Math.random() * upgrades.length)];
+            this.player.grantPowerup(up.type);
+            this.audio.rescue(); // upgrade fanfare
+            this._scorePops.push({
+              x: bf.x, y: Math.max(120, bf.y - 20),
+              text: up.label, timer: 1.8, color: '#0f0', big: true,
+            });
           }
         }
       }
@@ -250,6 +355,12 @@ export class Game {
     // Score pop-up timers
     for (const p of this._scorePops) p.timer -= dt;
     this._scorePops = this._scorePops.filter(p => p.timer > 0);
+
+    // Drain player crash events → particles, shake, flash
+    for (const ev of this.player.events) {
+      if (ev.type === 'explosion') this._spawnExplosion(ev.x, ev.y);
+    }
+    this.player.events.length = 0;
 
     // Player died (dead=true set by hit(), lives already decremented)
     if (this.player.dead) {
@@ -360,6 +471,17 @@ export class Game {
       ctx.fillText('MUTE', CANVAS_W - 8, 26);
     }
 
+    // Active infra gun upgrade + countdown, bottom-right
+    if (this.player.powerup) {
+      const labels = { DOUBLE: 'DOUBLE GUN', RAPID: 'RAPID FIRE', TRIPLE: 'TRIPLE GUN' };
+      ctx.fillStyle = '#0f0';
+      ctx.textAlign = 'right';
+      ctx.fillText(
+        labels[this.player.powerup] + ' ' + Math.ceil(this.player.powerupTimer),
+        CANVAS_W - 8, CANVAS_H - 10
+      );
+    }
+
     // Paused
     if (this._paused) {
       ctx.fillStyle = '#ff0';
@@ -401,11 +523,17 @@ export class Game {
     ctx.font = 'bold 14px "Press Start 2P", monospace';
     ctx.shadowColor = '#0f0';
     ctx.shadowBlur = 8;
-    ctx.fillText('ALL TICKETS CLEARED!', CANVAS_W / 2, CANVAS_H / 2 - 10);
+    ctx.fillText('ALL TICKETS CLEARED!', CANVAS_W / 2, CANVAS_H / 2 - 24);
     ctx.shadowBlur = 0;
     ctx.fillStyle = '#ff0';
-    ctx.font = '9px "Press Start 2P", monospace';
-    ctx.fillText(this.levelName + ' SPRINT COMPLETE', CANVAS_W / 2, CANVAS_H / 2 + 16);
+    ctx.font = 'bold 11px "Press Start 2P", monospace';
+    ctx.shadowColor = '#ff0';
+    ctx.shadowBlur = 6;
+    ctx.fillText('WELL DONE INFRA TEAM!', CANVAS_W / 2, CANVAS_H / 2 + 6);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#0cf';
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.fillText(this.levelName + ' SPRINT COMPLETE', CANVAS_W / 2, CANVAS_H / 2 + 32);
     ctx.restore();
   }
 
@@ -413,11 +541,71 @@ export class Game {
 
   _enterDead() {
     if (this.player.lives <= 0) {
-      this._enterGameOver();
+      // Top-3 score? Ask for the player's name before game over.
+      if (this.leaderboard.qualifies(this.player.score)) {
+        this._nameInput = '';
+        this.state = STATE.ENTER_NAME;
+      } else {
+        this._enterGameOver();
+      }
       return;
     }
     this._deathTimer = 2.0;
     this.state = STATE.DEAD;
+  }
+
+  // ── State: ENTER_NAME ─────────────────────────────────────────────────
+
+  _updateEnterName(dt) {
+    // Type A-Z / 0-9, Backspace to erase, Enter to save
+    for (const code of Object.keys(this.input.justPressed)) {
+      if (!this.input.justPressed[code]) continue;
+      if (code.startsWith('Key') && code.length === 4 && this._nameInput.length < 8) {
+        this._nameInput += code[3]; // 'KeyA' → 'A'
+      } else if (code.startsWith('Digit') && this._nameInput.length < 8) {
+        this._nameInput += code[5]; // 'Digit3' → '3'
+      } else if (code === 'Backspace') {
+        this._nameInput = this._nameInput.slice(0, -1);
+      } else if (code === 'Enter' && this._nameInput.length > 0) {
+        this.leaderboard.submit(this._nameInput, this.player.score);
+        this._enterGameOver();
+        return;
+      }
+    }
+  }
+
+  _renderEnterName(ctx) {
+    ctx.save();
+    // Dim the battlefield behind the dialog
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
+    ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ff0';
+    ctx.font = 'bold 14px "Press Start 2P", monospace';
+    ctx.shadowColor = '#ff0';
+    ctx.shadowBlur = 8;
+    ctx.fillText('NEW TOP SCORE!', CANVAS_W / 2, 170);
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = '#0f0';
+    ctx.font = '11px "Press Start 2P", monospace';
+    ctx.fillText(String(this.player.score), CANVAS_W / 2, 200);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.fillText('ENTER YOUR NAME:', CANVAS_W / 2, 250);
+
+    // Name + blinking cursor
+    const cursor = Math.floor(Date.now() / 400) % 2 === 0 ? '_' : ' ';
+    ctx.fillStyle = '#0cf';
+    ctx.font = 'bold 14px "Press Start 2P", monospace';
+    ctx.fillText(this._nameInput + cursor, CANVAS_W / 2, 285);
+
+    ctx.fillStyle = '#888';
+    ctx.font = '7px "Press Start 2P", monospace';
+    ctx.fillText('A-Z 0-9 · MAX 8 · ENTER TO SAVE', CANVAS_W / 2, 330);
+    ctx.restore();
   }
 
   _updateDead(dt) {
@@ -447,10 +635,8 @@ export class Game {
 
   _updateGameOver(dt) {
     this._stateTimer -= dt;
-    if (this._stateTimer <= 0) {
-      this.state = STATE.TITLE;
-    }
-    if (this.input.wasJustPressed('Space')) {
+    if (this._stateTimer <= 0 || this.input.wasJustPressed('Space')) {
+      this.leaderboard.refresh(); // pull teammates' latest scores for the title screen
       this.state = STATE.TITLE;
     }
   }

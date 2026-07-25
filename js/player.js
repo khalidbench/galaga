@@ -30,6 +30,16 @@ export class Player {
     this.rescuing = false;       // animation state for rescue
     this.rescueTimer = 0;
     this.bullets = [];
+    this.events = [];            // {type:'explosion', x, y} drained by Game
+    this.powerup = null;         // 'DOUBLE' | 'RAPID' | 'TRIPLE' from bonus flies
+    this.powerupTimer = 0;
+    this._fireCooldown = 0;
+  }
+
+  // Weapon upgrade earned by killing a bonus (ticket) fly
+  grantPowerup(type, duration = 8) {
+    this.powerup = type;
+    this.powerupTimer = duration;
   }
 
   // Called each frame
@@ -54,9 +64,21 @@ export class Player {
       this.x = Math.max(minX, Math.min(maxX, this.x));
     }
 
-    // Shoot
+    // Powerup countdown
+    if (this.powerupTimer > 0) {
+      this.powerupTimer -= dt;
+      if (this.powerupTimer <= 0) this.powerup = null;
+    }
+    this._fireCooldown -= dt;
+
+    // Shoot — RAPID lets you hold Space for continuous fire
     if (!this.dead && !this.captured) {
-      if (input.wasJustPressed('Space')) {
+      if (this.powerup === 'RAPID') {
+        if (input.isDown('Space') && this._fireCooldown <= 0) {
+          this._shoot();
+          this._fireCooldown = 0.12;
+        }
+      } else if (input.wasJustPressed('Space')) {
         this._shoot();
       }
     }
@@ -75,20 +97,42 @@ export class Player {
     }
   }
 
-  _shoot() {
-    if (this.bullets.length >= MAX_BULLETS) return;
-    this.audio.shoot();
-    this.bullets.push(new Bullet(this.x, this.y - this.hh, -BULLET_SPEED, true));
-    if (this.dual) {
-      // Second barrel offset
-      this.bullets.push(new Bullet(this.x + 16, this.y - this.hh, -BULLET_SPEED, true));
+  _maxBullets() {
+    switch (this.powerup) {
+      case 'RAPID':  return 8;
+      case 'TRIPLE': return 9;
+      case 'DOUBLE': return 6;
+      default:       return MAX_BULLETS;
     }
+  }
+
+  _shoot() {
+    if (this.bullets.length >= this._maxBullets()) return;
+    this.audio.shoot();
+    const spawn = (x, vx = 0) => {
+      const b = new Bullet(x, this.y - this.hh, -BULLET_SPEED, true);
+      b.vx = vx;
+      this.bullets.push(b);
+    };
+    if (this.powerup === 'TRIPLE') {
+      // Fan of three: straight + two angled
+      spawn(this.x);
+      spawn(this.x - 4, -110);
+      spawn(this.x + 4, 110);
+    } else if (this.powerup === 'DOUBLE') {
+      spawn(this.x - 5);
+      spawn(this.x + 5);
+    } else {
+      spawn(this.x);
+    }
+    if (this.dual) spawn(this.x + 16);
   }
 
   // Player was hit — returns true if game over
   hit() {
     if (this.invincibleTimer > 0 || this.dead) return false;
     this.audio.playerExplosion();
+    this.events.push({ type: 'explosion', x: this.x, y: this.y });
 
     if (this.dual) {
       // Lose the dual component first
