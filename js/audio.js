@@ -155,6 +155,26 @@ export class Audio {
     });
   }
 
+  extraShip() {
+    this._init();
+    if (this._muted) return;
+    const ctx = this._ctx;
+    // Fast ascending arpeggio — the classic "extra life" moment
+    const melody = [392, 523, 659, 784, 1047, 1319];
+    melody.forEach((f, i) => {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = f;
+      g.gain.setValueAtTime(0.4, ctx.currentTime + i * 0.07);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.07 + 0.15);
+      osc.connect(g);
+      g.connect(this._masterGain);
+      osc.start(ctx.currentTime + i * 0.07);
+      osc.stop(ctx.currentTime + i * 0.07 + 0.15);
+    });
+  }
+
   bonusCount() {
     this._play('square', 880, 880, 0.05, 0.25);
   }

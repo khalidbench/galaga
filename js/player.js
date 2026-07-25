@@ -34,6 +34,7 @@ export class Player {
     this.powerup = null;         // 'DOUBLE' | 'RAPID' | 'TRIPLE' from bonus flies
     this.powerupTimer = 0;
     this._fireCooldown = 0;
+    this.gunLevel = 1;           // permanent bonus gun: 1 single, 2 double, 3 triple
   }
 
   // Weapon upgrade earned by killing a bonus (ticket) fly
@@ -97,8 +98,17 @@ export class Player {
     }
   }
 
+  // Effective fire mode: a temporary powerup wins while active,
+  // otherwise the permanent bonus gun level applies.
+  _fireMode() {
+    if (this.powerup) return this.powerup;
+    if (this.gunLevel >= 3) return 'TRIPLE';
+    if (this.gunLevel === 2) return 'DOUBLE';
+    return 'SINGLE';
+  }
+
   _maxBullets() {
-    switch (this.powerup) {
+    switch (this._fireMode()) {
       case 'RAPID':  return 8;
       case 'TRIPLE': return 9;
       case 'DOUBLE': return 6;
@@ -114,12 +124,13 @@ export class Player {
       b.vx = vx;
       this.bullets.push(b);
     };
-    if (this.powerup === 'TRIPLE') {
+    const mode = this._fireMode();
+    if (mode === 'TRIPLE') {
       // Fan of three: straight + two angled
       spawn(this.x);
       spawn(this.x - 4, -110);
       spawn(this.x + 4, 110);
-    } else if (this.powerup === 'DOUBLE') {
+    } else if (mode === 'DOUBLE' || (mode === 'RAPID' && this.gunLevel >= 2)) {
       spawn(this.x - 5);
       spawn(this.x + 5);
     } else {

@@ -14,6 +14,9 @@ const LEVEL_NAMES = [
   'DEVOPS', 'JAVA', 'COBOL', 'FACADE', 'TEST AND DELIVERY', 'QUICK WINS',
 ];
 
+// Score thresholds that award a permanent bonus gun level
+const GUN_MILESTONES = [10000, 25000];
+
 // Game states
 const STATE = {
   TITLE:      'title',
@@ -231,6 +234,8 @@ export class Game {
     ctx.font = '7px "Press Start 2P", monospace';
     ctx.fillText('MOVE: ◀ ▶   INFRA GUN: SPACE', CANVAS_W / 2, 448);
     ctx.fillText('PAUSE: P   MUTE: M', CANVAS_W / 2, 464);
+    ctx.fillStyle = '#f0f';
+    ctx.fillText('BONUS GUN AT 10K+25K · EXTRA SHIP AT 20K', CANVAS_W / 2, 486);
 
     ctx.restore();
   }
@@ -245,8 +250,22 @@ export class Game {
     this._bonusFlyTimer = 3;
     this._bonusFlyPool  = shuffle([...BONUS_FLIES]);
     this._bonusFlyIdx   = 0;
+    this._gunMilestoneIdx = 0; // next GUN_MILESTONES entry to award
+    this._nextShipMilestone = 20000; // first extra ship, then every 50k
     this._startStage();
     this.state = STATE.PLAYING;
+  }
+
+  // Permanent gun level-up with fanfare and banner
+  _awardBonusGun(reason) {
+    if (this.player.gunLevel >= 3) return;
+    this.player.gunLevel++;
+    this.audio.rescue();
+    this._scorePops.push({
+      x: this.player.x, y: this.player.y - 40,
+      text: 'BONUS GUN LV' + this.player.gunLevel + '! (' + reason + ')',
+      timer: 2.2, color: '#f0f', big: true,
+    });
   }
 
   // Level name for the current stage, cycling through LEVEL_NAMES
@@ -260,6 +279,8 @@ export class Game {
     this._bonusKills = 0;
     this._bonusTotal = this.formation.livingCount();
     this._levelBannerTimer = 3.0; // show level name at stage start
+    // Reaching stage 3 awards a bonus gun level
+    if (this.stage === 3) this._awardBonusGun('STAGE 3');
   }
 
   _updatePlaying(dt) {
@@ -371,6 +392,24 @@ export class Game {
     }
     this.player.events.length = 0;
 
+    // Score milestones award permanent bonus gun levels
+    while (this._gunMilestoneIdx < GUN_MILESTONES.length &&
+           this.player.score >= GUN_MILESTONES[this._gunMilestoneIdx]) {
+      this._awardBonusGun(GUN_MILESTONES[this._gunMilestoneIdx] / 1000 + 'K PTS');
+      this._gunMilestoneIdx++;
+    }
+
+    // Score milestones award extra ships: 20k, then every 50k
+    while (this.player.score >= this._nextShipMilestone) {
+      this.player.lives++;
+      this.audio.extraShip();
+      this._scorePops.push({
+        x: this.player.x, y: this.player.y - 60,
+        text: 'EXTRA SHIP!', timer: 2.2, color: '#0cf', big: true,
+      });
+      this._nextShipMilestone += 50000;
+    }
+
     // Player died (dead=true set by hit(), lives already decremented)
     if (this.player.dead) {
       this._enterDead();
@@ -480,7 +519,8 @@ export class Game {
       ctx.fillText('MUTE', CANVAS_W - 8, 26);
     }
 
-    // Active infra gun upgrade + countdown, bottom-right
+    // Active infra gun upgrade + countdown, bottom-right;
+    // otherwise the permanent bonus gun level
     if (this.player.powerup) {
       const labels = { DOUBLE: 'DOUBLE GUN', RAPID: 'RAPID FIRE', TRIPLE: 'TRIPLE GUN' };
       ctx.fillStyle = '#0f0';
@@ -489,6 +529,10 @@ export class Game {
         labels[this.player.powerup] + ' ' + Math.ceil(this.player.powerupTimer),
         CANVAS_W - 8, CANVAS_H - 10
       );
+    } else if (this.player.gunLevel > 1) {
+      ctx.fillStyle = '#f0f';
+      ctx.textAlign = 'right';
+      ctx.fillText('GUN LV' + this.player.gunLevel, CANVAS_W - 8, CANVAS_H - 10);
     }
 
     // Paused
