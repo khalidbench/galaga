@@ -348,6 +348,15 @@ export class Game {
             this.player.hit();
           }
         }
+
+        // Bonus fly body crashes into the ship — destroys it like any
+        // other diving enemy (fly dies too, but awards no points/powerup)
+        if (!bf.dead &&
+            Math.abs(bf.x - this.player.x) < bf.hw + this.player.hw &&
+            Math.abs(bf.y - this.player.y) < bf.hh + this.player.hh) {
+          bf.dead = true;
+          this.player.hit();
+        }
       }
     }
     this.bonusFlies = this.bonusFlies.filter(bf => !bf.dead);
