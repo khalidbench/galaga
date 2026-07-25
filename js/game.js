@@ -8,6 +8,11 @@ import { BonusFly, BONUS_FLIES } from './bonusfly.js';
 const CANVAS_W = 448;
 const CANVAS_H = 512;
 
+// Level names cycle in this order, repeating until game over
+const LEVEL_NAMES = [
+  'DEVOPS', 'JAVA', 'COBOL', 'FACADE', 'TEST AND DELIVERY', 'QUICK WINS',
+];
+
 // Game states
 const STATE = {
   TITLE:      'title',
@@ -45,8 +50,8 @@ export class Game {
     this._deathTimer = 0;
     this._respawnReady = false;
 
-    // Bonus fly spawn: first appears quickly, then every 8-15s
-    this._bonusFlyTimer = 5 + Math.random() * 3;
+    // Bonus fly spawn: first appears quickly, then one every 10s
+    this._bonusFlyTimer = 3;
     this._bonusFlyPool = shuffle([...BONUS_FLIES]); // randomised order
     this._bonusFlyIdx  = 0;
 
@@ -103,12 +108,19 @@ export class Game {
     ctx.fillStyle = '#ff0';
     ctx.font = '32px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('GALAGA', CANVAS_W / 2, 160);
+    ctx.fillText('GALAGA', CANVAS_W / 2, 150);
 
     // Subtitle
+    ctx.fillStyle = '#0f0';
+    ctx.font = 'bold 14px "Press Start 2P", monospace';
+    ctx.shadowColor = '#0f0';
+    ctx.shadowBlur = 6;
+    ctx.fillText('INFRATASK FORCE', CANVAS_W / 2, 182);
+    ctx.shadowBlur = 0;
+
     ctx.fillStyle = '#0cf';
-    ctx.font = '8px "Press Start 2P", monospace';
-    ctx.fillText('© 1981 NAMCO', CANVAS_W / 2, 186);
+    ctx.font = '7px "Press Start 2P", monospace';
+    ctx.fillText('INSPIRED BY © 1981 NAMCO', CANVAS_W / 2, 206);
 
     // Blink press space
     if (Math.floor(Date.now() / 500) % 2 === 0) {
@@ -125,7 +137,7 @@ export class Game {
     // Controls hint
     ctx.fillStyle = '#888';
     ctx.font = '7px "Press Start 2P", monospace';
-    ctx.fillText('MOVE: ◀ ▶   FIRE: SPACE', CANVAS_W / 2, 360);
+    ctx.fillText('MOVE: ◀ ▶   INFRA GUN: SPACE', CANVAS_W / 2, 360);
     ctx.fillText('PAUSE: P   MUTE: M', CANVAS_W / 2, 376);
 
     ctx.restore();
@@ -138,11 +150,16 @@ export class Game {
     this.player = new Player(this.audio);
     this.bonusFlies = [];
     this._scorePops = [];
-    this._bonusFlyTimer = 5 + Math.random() * 3;
+    this._bonusFlyTimer = 3;
     this._bonusFlyPool  = shuffle([...BONUS_FLIES]);
     this._bonusFlyIdx   = 0;
     this._startStage();
     this.state = STATE.PLAYING;
+  }
+
+  // Level name for the current stage, cycling through LEVEL_NAMES
+  get levelName() {
+    return LEVEL_NAMES[(this.stage - 1) % LEVEL_NAMES.length];
   }
 
   _startStage() {
@@ -150,6 +167,7 @@ export class Game {
     this.formation = new Formation(this.audio, this.stage);
     this._bonusKills = 0;
     this._bonusTotal = this.formation.livingCount();
+    this._levelBannerTimer = 3.0; // show level name at stage start
   }
 
   _updatePlaying(dt) {
@@ -161,6 +179,8 @@ export class Game {
       this._muted = this.audio.toggleMute();
     }
     if (this._paused) return;
+
+    if (this._levelBannerTimer > 0) this._levelBannerTimer -= dt;
 
     this.player.update(dt, this.input);
     this.formation.update(dt, this.player, this.stage);
@@ -187,7 +207,7 @@ export class Game {
         const def = this._bonusFlyPool[this._bonusFlyIdx % this._bonusFlyPool.length];
         this._bonusFlyIdx++;
         this.bonusFlies.push(new BonusFly(def));
-        this._bonusFlyTimer = 8 + Math.random() * 7;
+        this._bonusFlyTimer = 10;
       }
     }
 
@@ -251,6 +271,24 @@ export class Game {
     this._renderScorePops(ctx);
     this._renderHUD(ctx);
     if (this.isBonus) this._renderBonusBanner(ctx);
+    this._renderLevelBanner(ctx);
+  }
+
+  // "LEVEL: DEVOPS" splash shown for a few seconds at the start of each stage
+  _renderLevelBanner(ctx) {
+    if (!this._levelBannerTimer || this._levelBannerTimer <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, this._levelBannerTimer / 0.5);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#0cf';
+    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.fillText('LEVEL ' + this.stage, CANVAS_W / 2, CANVAS_H / 2 - 46);
+    ctx.fillStyle = '#ff0';
+    ctx.font = 'bold 16px "Press Start 2P", monospace';
+    ctx.shadowColor = '#ff0';
+    ctx.shadowBlur = 8;
+    ctx.fillText(this.levelName, CANVAS_W / 2, CANVAS_H / 2 - 20);
+    ctx.restore();
   }
 
   _renderScorePops(ctx) {
@@ -308,10 +346,12 @@ export class Game {
     ctx.fillStyle = '#ff0';
     ctx.fillText(String(this.highScore).padStart(6, '0'), CANVAS_W / 2, 26);
 
-    // Stage number top-right
+    // Level name top-right
     ctx.fillStyle = '#0cf';
     ctx.textAlign = 'right';
-    ctx.fillText('ST ' + this.stage, CANVAS_W - 8, 14);
+    ctx.font = '7px "Press Start 2P", monospace';
+    ctx.fillText(this.levelName, CANVAS_W - 8, 14);
+    ctx.font = '8px "Press Start 2P", monospace';
 
     // Muted indicator
     if (this._muted) {
@@ -356,10 +396,16 @@ export class Game {
 
   _renderStageClear(ctx) {
     ctx.save();
-    ctx.fillStyle = '#0f0';
-    ctx.font = '12px "Press Start 2P", monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('STAGE ' + this.stage + ' CLEAR!', CANVAS_W / 2, CANVAS_H / 2);
+    ctx.fillStyle = '#0f0';
+    ctx.font = 'bold 14px "Press Start 2P", monospace';
+    ctx.shadowColor = '#0f0';
+    ctx.shadowBlur = 8;
+    ctx.fillText('ALL TICKETS CLEARED!', CANVAS_W / 2, CANVAS_H / 2 - 10);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ff0';
+    ctx.font = '9px "Press Start 2P", monospace';
+    ctx.fillText(this.levelName + ' SPRINT COMPLETE', CANVAS_W / 2, CANVAS_H / 2 + 16);
     ctx.restore();
   }
 
