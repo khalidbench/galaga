@@ -35,6 +35,18 @@ export class Player {
     this.powerupTimer = 0;
     this._fireCooldown = 0;
     this.gunLevel = 1;           // permanent bonus gun: 1 single, 2 double, 3 triple
+    this.streak = 0;             // SLA streak: consecutive bullet hits
+    this.bulletSpeedFactor = 1;  // <1 during NETWORK LATENCY incidents
+  }
+
+  // ── SLA streak: hits build a score multiplier, misses erode it ────────
+  registerHit()  { this.streak++; }
+  registerMiss() { this.streak = Math.max(0, this.streak - 5); }
+  scoreMult() {
+    if (this.streak >= 20) return 5;
+    if (this.streak >= 10) return 3;
+    if (this.streak >= 5)  return 2;
+    return 1;
   }
 
   // Weapon upgrade earned by killing a bonus (ticket) fly
@@ -84,8 +96,11 @@ export class Player {
       }
     }
 
-    // Update bullets
+    // Update bullets; a bullet that dies without hitting anything is a miss
     for (const b of this.bullets) b.update(dt, CANVAS_H);
+    for (const b of this.bullets) {
+      if (b.dead && !b.hit) this.registerMiss();
+    }
     this.bullets = this.bullets.filter(b => !b.dead);
 
     // Rescue animation
@@ -119,7 +134,7 @@ export class Player {
     if (this.bullets.length >= this._maxBullets()) return;
     this.audio.shoot();
     const spawn = (x, vx = 0) => {
-      const b = new Bullet(x, this.y - this.hh, -BULLET_SPEED, true);
+      const b = new Bullet(x, this.y - this.hh, -BULLET_SPEED * this.bulletSpeedFactor, true);
       b.vx = vx;
       this.bullets.push(b);
     };

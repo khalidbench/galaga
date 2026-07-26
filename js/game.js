@@ -5,6 +5,7 @@ import { Audio } from './audio.js';
 import { Input } from './input.js';
 import { BonusFly, BONUS_FLIES } from './bonusfly.js';
 import { Leaderboard } from './leaderboard.js';
+import { P1Boss } from './p1boss.js';
 
 const CANVAS_W = 448;
 const CANVAS_H = 512;
@@ -16,6 +17,13 @@ const LEVEL_NAMES = [
 
 // Score thresholds that award a permanent bonus gun level
 const GUN_MILESTONES = [10000, 25000];
+
+// Random incident events (from stage 4, one chance per stage, 10s each)
+const INCIDENTS = [
+  { type: 'LATENCY',     label: 'NETWORK LATENCY' },
+  { type: 'BLACKOUT',    label: 'MONITORING BLACKOUT' },
+  { type: 'AUTOSCALING', label: 'AUTOSCALING' },
+];
 
 // Game states
 const STATE = {
@@ -281,6 +289,92 @@ export class Game {
     this._levelBannerTimer = 3.0; // show level name at stage start
     // Reaching stage 3 awards a bonus gun level
     if (this.stage === 3) this._awardBonusGun('STAGE 3');
+
+    // P1 boss: from stage 8 (skip bonus rounds), appears mid-stage
+    this.p1 = null;
+    this._p1Timer = (this.stage >= 8 && !this.isBonus)
+      ? 8 + Math.random() * 10 : Infinity;
+
+    // Incident events: from stage 4 (skip bonus rounds), one per stage
+    this._endIncident();
+    this._incidentTimer = (this.stage >= 4 && !this.isBonus)
+      ? 6 + Math.random() * 8 : Infinity;
+  }
+
+  // ── P1 boss ───────────────────────────────────────────────────────────
+
+  _updateP1(dt) {
+    const p1 = this.p1;
+    p1.update(dt, this.player.x, this.player.y);
+
+    // Player bullets vs boss
+    for (const b of this.player.bullets) {
+      if (b.dead || p1.dead) continue;
+      if (Math.abs(b.x - p1.x) < b.hw + p1.hw &&
+          Math.abs(b.y - p1.y) < b.hh + p1.hh) {
+        b.dead = true;
+        b.hit = true;
+        this.player.registerHit();
+        const pts = p1.takeHit(this.audio);
+        if (pts > 0) {
+          const total = pts * this.player.scoreMult();
+          this.player.score += total;
+          this.audio.stageClear();
+          this._scorePops.push({
+            x: p1.x, y: p1.y, pts: total, timer: 1.5, color: '#f22',
+          });
+          this._scorePops.push({
+            x: CANVAS_W / 2, y: 150,
+            text: 'INCIDENT RESOLVED!', timer: 2.4, color: '#0f0', big: true,
+          });
+          // Guaranteed gun powerup for resolving a P1
+          const types = ['DOUBLE', 'RAPID', 'TRIPLE'];
+          this.player.grantPowerup(types[Math.floor(Math.random() * types.length)]);
+        }
+      }
+    }
+
+    // Boss bullets + body vs player
+    if (!this.player.dead && !this.player.captured && !this.player.isInvincible()) {
+      for (const b of p1.bullets) {
+        if (b.dead) continue;
+        if (Math.abs(b.x - this.player.x) < b.hw + this.player.hw &&
+            Math.abs(b.y - this.player.y) < b.hh + this.player.hh) {
+          b.dead = true;
+          this.player.hit();
+        }
+      }
+      if (!p1.dead &&
+          Math.abs(p1.x - this.player.x) < p1.hw + this.player.hw &&
+          Math.abs(p1.y - this.player.y) < p1.hh + this.player.hh) {
+        this.player.hit(); // the boss shrugs off the collision
+      }
+    }
+
+    if (p1.dead) this.p1 = null;
+  }
+
+  // ── Incident events ───────────────────────────────────────────────────
+
+  _startIncident() {
+    const def = INCIDENTS[Math.floor(Math.random() * INCIDENTS.length)];
+    this._incident = { ...def, timer: 10 };
+    this.audio.tractorBeam(); // ominous warble as the alarm
+    if (def.type === 'LATENCY')     this.player.bulletSpeedFactor = 0.5;
+    if (def.type === 'AUTOSCALING') this.formation.autoscaling = true;
+  }
+
+  _endIncident(survived = false) {
+    if (this._incident && survived && !this.player.dead) {
+      this.player.score += 1000;
+      this._scorePops.push({
+        x: CANVAS_W / 2, y: 140,
+        text: 'INCIDENT SURVIVED +1000', timer: 2.0, color: '#0f0', big: true,
+      });
+    }
+    this._incident = null;
+    if (this.player) this.player.bulletSpeedFactor = 1;
+    if (this.formation) this.formation.autoscaling = false;
   }
 
   _updatePlaying(dt) {
@@ -313,13 +407,37 @@ export class Game {
       localStorage.setItem('gal_hi', this.highScore);
     }
 
+    // Incident event lifecycle
+    this._incidentTimer -= dt;
+    if (this._incidentTimer <= 0 && !this._incident) {
+      this._incidentTimer = Infinity;
+      this._startIncident();
+    }
+    if (this._incident) {
+      this._incident.timer -= dt;
+      if (this._incident.timer <= 0) this._endIncident(true);
+    }
+
+    // P1 boss lifecycle
+    this._p1Timer -= dt;
+    if (this._p1Timer <= 0 && !this.p1) {
+      this._p1Timer = Infinity;
+      this.p1 = new P1Boss(this.stage);
+      this.audio.enemyDive();
+      this._scorePops.push({
+        x: CANVAS_W / 2, y: 120,
+        text: 'P1 INCIDENT DETECTED!', timer: 2.2, color: '#f22', big: true,
+      });
+    }
+    if (this.p1) this._updateP1(dt);
+
     // Bonus fly spawn timer (only after formation has entered)
     if (this.formation.allEntered()) {
       this._bonusFlyTimer -= dt;
       if (this._bonusFlyTimer <= 0) {
         const def = this._bonusFlyPool[this._bonusFlyIdx % this._bonusFlyPool.length];
         this._bonusFlyIdx++;
-        this.bonusFlies.push(new BonusFly(def));
+        this.bonusFlies.push(new BonusFly(def, this.stage));
         this._bonusFlyTimer = 10;
       }
     }
@@ -334,10 +452,13 @@ export class Game {
         if (Math.abs(b.x - bf.x) < b.hw + bf.hw &&
             Math.abs(b.y - bf.y) < b.hh + bf.hh) {
           b.dead = true;
+          b.hit = true;
+          this.player.registerHit();
           const pts = bf.takeHit(this.audio);
           if (pts > 0) {
-            this.player.score += pts;
-            this._scorePops.push({ x: bf.x, y: bf.y, pts, timer: 1.2, color: bf.color });
+            const total = pts * this.player.scoreMult();
+            this.player.score += total;
+            this._scorePops.push({ x: bf.x, y: bf.y, pts: total, timer: 1.2, color: bf.color });
             if (this.player.score > this.highScore) {
               this.highScore = this.player.score;
               localStorage.setItem('gal_hi', this.highScore);
@@ -424,13 +545,34 @@ export class Game {
 
   _renderPlaying(ctx) {
     if (!this.formation || !this.player) return;
+    // MONITORING BLACKOUT: the formation fades to silhouettes
+    const blackout = this._incident && this._incident.type === 'BLACKOUT';
+    if (blackout) ctx.globalAlpha = 0.22;
     this.formation.draw(ctx);
+    if (blackout) ctx.globalAlpha = 1;
     for (const bf of this.bonusFlies) bf.draw(ctx);
+    if (this.p1) this.p1.draw(ctx);
     this.player.draw(ctx);
     this._renderScorePops(ctx);
     this._renderHUD(ctx);
     if (this.isBonus) this._renderBonusBanner(ctx);
+    if (this._incident) this._renderIncidentBanner(ctx);
     this._renderLevelBanner(ctx);
+  }
+
+  _renderIncidentBanner(ctx) {
+    ctx.save();
+    ctx.textAlign = 'center';
+    const blink = Math.floor(Date.now() / 300) % 2 === 0;
+    ctx.fillStyle = blink ? '#f22' : '#f88';
+    ctx.font = 'bold 10px "Press Start 2P", monospace';
+    ctx.shadowColor = '#f22';
+    ctx.shadowBlur = 8;
+    ctx.fillText(
+      'INCIDENT: ' + this._incident.label + ' ' + Math.ceil(this._incident.timer),
+      CANVAS_W / 2, 62
+    );
+    ctx.restore();
   }
 
   // "LEVEL: DEVOPS" splash shown for a few seconds at the start of each stage
@@ -533,6 +675,14 @@ export class Game {
       ctx.fillStyle = '#f0f';
       ctx.textAlign = 'right';
       ctx.fillText('GUN LV' + this.player.gunLevel, CANVAS_W - 8, CANVAS_H - 10);
+    }
+
+    // SLA streak multiplier, bottom-left above the life icons
+    if (this.player.scoreMult() > 1) {
+      ctx.fillStyle = '#0f0';
+      ctx.textAlign = 'left';
+      ctx.fillText('SLA x' + this.player.scoreMult() + ' (' + this.player.streak + ')',
+                   8, CANVAS_H - 26);
     }
 
     // Paused

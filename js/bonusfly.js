@@ -20,12 +20,13 @@ export const BONUS_FLIES = [
 ];
 
 export class BonusFly {
-  constructor(def) {
+  constructor(def, stage = 1) {
     this.name   = def.name;
     this.color  = def.color;
     this.points = def.points;
-    this.hp     = def.hp;
-    this.maxHp  = def.hp;
+    // Tankier on higher stages so a multi-barrel gun still works for it
+    this.hp     = def.hp + Math.floor(stage / 4);
+    this.maxHp  = this.hp;
 
     // Start above screen at a random x
     this.x = 60 + Math.random() * (CANVAS_W - 120);

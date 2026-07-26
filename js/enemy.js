@@ -114,7 +114,7 @@ export class Enemy {
       this.state = 'returning';
       return;
     }
-    const speed = this.diveSpeed * (1 + stageSpeed * 0.15);
+    const speed = this.diveSpeed * Math.min(2.6, 1 + stageSpeed * 0.11);
     this.diveT = Math.min(1, this.diveT + speed * dt);
     const pos = evalCubicBezier(this.divePoints, this.diveT);
     this.x = pos.x;
@@ -183,15 +183,20 @@ export class Enemy {
   }
 
   _updateShooting(dt, playerX, playerY, stageSpeed, audio) {
-    if (this.state !== 'diving' && this.state !== 'captureBeam') return;
+    const attacking = this.state === 'diving' || this.state === 'captureBeam';
+    // From stage 5, enemies also snipe while flying in to formation
+    const entryFire = this.state === 'entering' && stageSpeed >= 5;
+    if (!attacking && !entryFire) return;
     this.shootTimer -= dt;
     if (this.shootTimer <= 0) {
-      this.shootTimer = 0.8 + Math.random() * 1.2 - stageSpeed * 0.05;
-      this._fireAt(playerX, playerY, audio);
+      this.shootTimer = entryFire
+        ? 1.5 + Math.random() * 1.5
+        : Math.max(0.35, 0.8 + Math.random() * 1.2 - stageSpeed * 0.05);
+      this._fireAt(playerX, playerY, stageSpeed);
     }
   }
 
-  _fireAt(tx, ty, audio) {
+  _fireAt(tx, ty, stageSpeed = 1) {
     let dx = tx - this.x;
     // Always fire downward with at least 80px of vertical clearance,
     // and cap horizontal spread to 45° from straight down so bullets
@@ -199,7 +204,7 @@ export class Enemy {
     let dy = Math.max(ty - this.y, 80);
     if (Math.abs(dx) > dy) dx = Math.sign(dx) * dy; // clamp to 45°
     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-    const speed = 220;
+    const speed = Math.min(340, 220 + stageSpeed * 6); // faster shots each stage
     const b = new Bullet(this.x, this.y, (dy / dist) * speed, false);
     b.vx = (dx / dist) * speed;
     this.bullets.push(b);

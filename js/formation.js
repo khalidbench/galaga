@@ -29,8 +29,15 @@ export class Formation {
     this.events = [];
 
     this._diveTimer = 1.5 + Math.random();
-    this._diveTimerMin = Math.max(0.6, 2.0 - stage * 0.08);
-    this._diveTimerMax = Math.max(1.0, 3.5 - stage * 0.1);
+    this._diveTimerMin = Math.max(0.35, 2.0 - stage * 0.1);
+    this._diveTimerMax = Math.max(0.7, 3.5 - stage * 0.12);
+
+    // Formation creeps down toward the player on higher stages
+    this.creepY = 0;
+    this._creepRate = Math.min(6, stage * 0.3); // px/s, caps at 6
+
+    // AUTOSCALING incident: killed enemies may respawn while true
+    this.autoscaling = false;
 
     this._entryQueue = [];  // enemies waiting to enter
     this._entryDelay = 0;
@@ -121,15 +128,18 @@ export class Formation {
       this._entryDelay = this._groupDelay + Math.random() * 0.2;
     }
 
-    // Sway formation
+    // Sway formation + slow downward creep (capped at 70px)
     this.swayT += SWAY_SPEED * 2 * Math.PI * dt;
     const swayOffset = Math.sin(this.swayT) * SWAY_AMP;
+    if (this.allEntered()) {
+      this.creepY = Math.min(70, this.creepY + this._creepRate * dt);
+    }
 
     // Update formation positions with sway
     for (const e of this.enemies) {
       if (e.state === 'formation') {
         e.x = e.formX + swayOffset;
-        e.y = e.formY;
+        e.y = e.formY + this.creepY;
       }
     }
 
@@ -172,15 +182,17 @@ export class Formation {
         if (e.dead || !b.isPlayer) continue;
         if (b.hits(e)) {
           b.dead = true;
-          const wasDiving = e.state === 'diving' || e.state === 'captureBeam';
+          b.hit = true;              // counts toward the SLA streak
+          player.registerHit();
           const pts = e.takeHit(b, this.audio,
             (boss) => this._onBossKilled(boss, player));
           if (pts > 0) {
-            player.score += pts;
-            // Floating score pop-up for any diving kill
+            player.score += pts * player.scoreMult();
+            // Floating score pop-up for any diving kill (streak-multiplied)
             const color = e.type === EnemyType.BOSS ? '#0f0'
                         : e.type === EnemyType.BUTTERFLY ? '#f66' : '#0cf';
-            this.events.push({ type: 'score', x: e.x, y: e.y, pts, color });
+            this.events.push({ type: 'score', x: e.x, y: e.y,
+                               pts: pts * player.scoreMult(), color });
             // Track escort-group triple kill
             this._registerGroupKill(e, player);
           }
@@ -209,6 +221,20 @@ export class Formation {
       }
     }
 
+    // AUTOSCALING incident: dead enemies have a 50% chance to respawn
+    // and fly back in while the incident lasts
+    if (this.autoscaling) {
+      for (const e of this.enemies) {
+        if (e.dead && Math.random() < 0.5) {
+          const clone = new Enemy(e.type, e.col, e.row);
+          clone.formX = e.formX;
+          clone.formY = e.formY;
+          this._buildEntryPath(clone);
+          this.enemies.push(clone);
+        }
+      }
+    }
+
     // Clean dead enemies
     this.enemies = this.enemies.filter(e => !e.dead);
   }
@@ -228,8 +254,9 @@ export class Formation {
       return;
     }
 
-    // Regular dive: 1–3 random enemies
-    const count = Math.min(eligible.length, 1 + Math.floor(Math.random() * 2));
+    // Regular dive: pack grows with the stage (up to 6 at once)
+    const packSize = Math.min(6, 1 + Math.floor(this.stage / 4) + Math.floor(Math.random() * 2));
+    const count = Math.min(eligible.length, packSize);
     const divers = shuffle(eligible).slice(0, count);
     for (const e of divers) {
       if (e.type === EnemyType.BOSS && !player.captured && Math.random() < 0.30) {
