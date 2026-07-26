@@ -33,14 +33,19 @@ export class Leaderboard {
   }
 
   _merge(remote) {
-    // Union of remote + local, best score per name, top 3 overall
-    const byName = new Map();
+    // Union of remote + local, top 3 overall. The same player may hold
+    // several slots (classic arcade style) — only exact name+score
+    // duplicates are collapsed (they're the same submission seen twice).
+    const seen = new Set();
+    const all = [];
     for (const e of [...remote, ...this.top]) {
       if (!e || typeof e.score !== 'number' || !e.name) continue;
-      const prev = byName.get(e.name);
-      if (!prev || e.score > prev.score) byName.set(e.name, e);
+      const key = e.name + '|' + e.score;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      all.push(e);
     }
-    this.top = [...byName.values()]
+    this.top = all
       .sort((a, b) => b.score - a.score)
       .slice(0, MAX_ENTRIES);
   }

@@ -769,7 +769,7 @@ export class Game {
         this._nameInput += code[5]; // 'Digit3' → '3'
       } else if (code === 'Backspace') {
         this._nameInput = this._nameInput.slice(0, -1);
-      } else if (code === 'Enter' && this._nameInput.length > 0) {
+      } else if ((code === 'Enter' || code === 'NumpadEnter') && this._nameInput.length > 0) {
         this.leaderboard.submit(this._nameInput, this.player.score);
         this._enterGameOver();
         return;
