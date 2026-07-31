@@ -1,9 +1,8 @@
-name: Leaderboard keepalive
+name: Leaderboard backup
 
-# Keeps the free JSON score store alive and backs the scores up into
-# the repo. If the store ever vanishes, recreates it from the backup and
-# points the game at the new store via leaderboard-config.json.
-# Daily: the previous store provider purged data within days.
+# Daily backup of the team leaderboard into the repo. The store itself
+# is a Google Apps Script web app (no expiry), so this is purely a
+# versioned safety copy — restorable by POSTing it back to the store.
 on:
   schedule:
     - cron: '0 6 * * *' # every day 06:00 UTC
@@ -13,43 +12,27 @@ permissions:
   contents: write
 
 jobs:
-  keepalive:
+  backup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Refresh store, back up scores, self-heal if store is gone
+      - name: Fetch scores and back them up
         run: |
           set -e
           API=$(jq -r .api leaderboard-config.json)
           echo "Store: $API"
-          DATA=$(curl -sf "$API" || true)
-
-          # A missing store answers 200 with an error body — treat that as gone
-          if [ -z "$DATA" ] || ! echo "$DATA" | jq -e '.scores' > /dev/null 2>&1; then
-            echo "Store unreachable — recreating from backup"
-            BACKUP=$(cat leaderboard-backup.json 2>/dev/null || echo '{"scores":[]}')
-            API=$(curl -sf -X POST https://extendsclass.com/api/json-storage/bin \
-                    -H 'Content-Type: application/json' -d "$BACKUP" | jq -r '.uri')
-            if [ -z "$API" ] || [ "$API" = "null" ]; then
-              echo "Could not recreate store" >&2
-              exit 1
-            fi
-            echo "New store: $API"
-            DATA=$BACKUP
-          else
-            # Touch the blob so its inactivity clock resets
-            curl -sf -X PUT "$API" -H 'Content-Type: application/json' -d "$DATA" > /dev/null
+          DATA=$(curl -sfL "$API")
+          if ! echo "$DATA" | jq -e '.scores' > /dev/null 2>&1; then
+            echo "Store returned invalid data — keeping previous backup" >&2
+            exit 0
           fi
-
           echo "$DATA" | jq . > leaderboard-backup.json
-          jq -n --arg api "$API" '{api:$api}' > leaderboard-config.json
 
-      - name: Commit backup (also keeps this schedule from being auto-disabled)
+      - name: Commit backup
         run: |
           git config user.name "leaderboard-bot"
           git config user.email "actions@users.noreply.github.com"
-          date -u +%FT%TZ > .github/keepalive
-          git add leaderboard-backup.json leaderboard-config.json .github/keepalive
-          git commit -m "Leaderboard keepalive + score backup" || exit 0
+          git add leaderboard-backup.json
+          git commit -m "Leaderboard backup" || exit 0
           git push

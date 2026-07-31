@@ -1,9 +1,10 @@
 // Shared team leaderboard — top 3 scores, persisted for everyone.
-// The store URL lives in leaderboard-config.json (repo root) so the
-// weekly keepalive GitHub Action can transparently repoint the game
-// if it ever has to recreate the store. Falls back to localStorage
-// when the network is unavailable so the game never blocks.
-const DEFAULT_API = 'https://extendsclass.com/api/json-storage/bin/dbebebb';
+// Backed by a Google Apps Script web app (no expiry, proper CORS).
+// Reads are plain GETs; writes are POSTs with a text/plain body so the
+// browser never sends a CORS preflight (which broke previous stores).
+// The URL also lives in leaderboard-config.json so it can be swapped
+// without touching code. Falls back to localStorage when offline.
+const DEFAULT_API = 'https://script.google.com/macros/s/AKfycbw7Q8RXjrcT6LOwSziZQws1FQNPC5OKefMoPO57G7ZRXXcd84bdvKsw-KNRunzdpJ4zuw/exec';
 const LOCAL_KEY = 'gal_top3';
 const MAX_ENTRIES = 3;
 
@@ -86,9 +87,10 @@ export class Leaderboard {
         this._merge(data.scores || []);
         this._saveLocal();
       }
+      // POST with a plain-text body: a "simple" request that skips the
+      // CORS preflight entirely (the server parses the JSON itself)
       await fetch(await apiUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
         body: JSON.stringify({ scores: this.top }),
       });
     } catch { /* offline — local copy still saved */ }
