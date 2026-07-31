@@ -1,11 +1,12 @@
 name: Leaderboard keepalive
 
-# Keeps the free jsonblob.com score store alive forever and backs the
-# scores up into the repo. If the store ever vanishes, recreates it from
-# the backup and points the game at the new store via leaderboard-config.json.
+# Keeps the free JSON score store alive and backs the scores up into
+# the repo. If the store ever vanishes, recreates it from the backup and
+# points the game at the new store via leaderboard-config.json.
+# Daily: the previous store provider purged data within days.
 on:
   schedule:
-    - cron: '0 6 * * 1' # every Monday 06:00 UTC
+    - cron: '0 6 * * *' # every day 06:00 UTC
   workflow_dispatch:
 
 permissions:
@@ -24,17 +25,16 @@ jobs:
           echo "Store: $API"
           DATA=$(curl -sf "$API" || true)
 
-          if [ -z "$DATA" ]; then
+          # A missing store answers 200 with an error body — treat that as gone
+          if [ -z "$DATA" ] || ! echo "$DATA" | jq -e '.scores' > /dev/null 2>&1; then
             echo "Store unreachable — recreating from backup"
             BACKUP=$(cat leaderboard-backup.json 2>/dev/null || echo '{"scores":[]}')
-            LOC=$(curl -sf -i -X POST https://jsonblob.com/api/jsonBlob \
-                    -H 'Content-Type: application/json' -d "$BACKUP" \
-                  | tr -d '\r' | grep -i '^location:' | awk '{print $2}')
-            if [ -z "$LOC" ]; then
+            API=$(curl -sf -X POST https://extendsclass.com/api/json-storage/bin \
+                    -H 'Content-Type: application/json' -d "$BACKUP" | jq -r '.uri')
+            if [ -z "$API" ] || [ "$API" = "null" ]; then
               echo "Could not recreate store" >&2
               exit 1
             fi
-            API="https://jsonblob.com$LOC"
             echo "New store: $API"
             DATA=$BACKUP
           else

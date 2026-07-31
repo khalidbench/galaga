@@ -3,7 +3,7 @@
 // weekly keepalive GitHub Action can transparently repoint the game
 // if it ever has to recreate the store. Falls back to localStorage
 // when the network is unavailable so the game never blocks.
-const DEFAULT_API = 'https://jsonblob.com/api/jsonBlob/019f99f1-1d65-7e38-8af1-714193384bd2';
+const DEFAULT_API = 'https://extendsclass.com/api/json-storage/bin/dbebebb';
 const LOCAL_KEY = 'gal_top3';
 const MAX_ENTRIES = 3;
 
