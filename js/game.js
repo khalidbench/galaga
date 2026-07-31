@@ -217,7 +217,7 @@ export class Game {
     // High score
     ctx.fillStyle = '#f80';
     ctx.font = '8px "Press Start 2P", monospace';
-    ctx.fillText('HI-SCORE  ' + this.highScore, CANVAS_W / 2, 292);
+    ctx.fillText('HI-SCORE  ' + this.displayHighScore, CANVAS_W / 2, 292);
 
     // Shared team leaderboard
     ctx.fillStyle = '#0f0';
@@ -274,6 +274,13 @@ export class Game {
       text: 'BONUS GUN LV' + this.player.gunLevel + '! (' + reason + ')',
       timer: 2.2, color: '#f0f', big: true,
     });
+  }
+
+  // HI-SCORE shown on screen: the best score anyone on the team has —
+  // top of the shared leaderboard or this browser's local best.
+  get displayHighScore() {
+    const teamBest = this.leaderboard.top.length ? this.leaderboard.top[0].score : 0;
+    return Math.max(this.highScore, teamBest);
   }
 
   // Level name for the current stage, cycling through LEVEL_NAMES
@@ -654,7 +661,7 @@ export class Game {
     ctx.textAlign = 'center';
     ctx.fillText('HI-SCORE', CANVAS_W / 2, 14);
     ctx.fillStyle = '#ff0';
-    ctx.fillText(String(this.highScore).padStart(6, '0'), CANVAS_W / 2, 26);
+    ctx.fillText(String(this.displayHighScore).padStart(6, '0'), CANVAS_W / 2, 26);
 
     // Level name top-right
     ctx.fillStyle = '#0cf';
