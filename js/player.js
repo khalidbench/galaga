@@ -216,9 +216,9 @@ export class Player {
   }
 
   drawHUD(ctx) {
-    // Lives icons bottom-left
+    // Lives icons bottom-left (2x-scale icons need wider spacing)
     for (let i = 0; i < this.lives - 1; i++) {
-      drawLifeIcon(ctx, 8 + i * 16, CANVAS_H - 16);
+      drawLifeIcon(ctx, 8 + i * 20, CANVAS_H - 22);
     }
   }
 }

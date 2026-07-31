@@ -29,12 +29,12 @@ export class Formation {
     this.events = [];
 
     this._diveTimer = 1.5 + Math.random();
-    this._diveTimerMin = Math.max(0.35, 2.0 - stage * 0.1);
-    this._diveTimerMax = Math.max(0.7, 3.5 - stage * 0.12);
+    this._diveTimerMin = Math.max(0.35, 2.2 - (stage - 1) * 0.09);
+    this._diveTimerMax = Math.max(0.7, 3.8 - (stage - 1) * 0.11);
 
-    // Formation creeps down toward the player on higher stages
+    // Formation creeps down toward the player from stage 3 onward
     this.creepY = 0;
-    this._creepRate = Math.min(6, stage * 0.3); // px/s, caps at 6
+    this._creepRate = Math.min(6, Math.max(0, stage - 2) * 0.35); // px/s
 
     // AUTOSCALING incident: killed enemies may respawn while true
     this.autoscaling = false;
@@ -245,17 +245,21 @@ export class Formation {
     );
     if (eligible.length === 0) return;
 
-    // 50% chance of a coordinated escort formation attack (boss + 2 escorts)
+    // Escort formation attack (boss + 2 escorts): rare at first,
+    // ramping up to a 50% chance by stage 5
+    const escortChance = Math.min(0.5, 0.15 + this.stage * 0.07);
     const bosses = eligible.filter(e => e.type === EnemyType.BOSS);
     const butterflies = eligible.filter(e => e.type === EnemyType.BUTTERFLY);
     if (bosses.length > 0 && butterflies.length >= 2 &&
-        Math.random() < 0.50) {
+        Math.random() < escortChance) {
       this._startEscortAttack(bosses[0], butterflies, player);
       return;
     }
 
-    // Regular dive: pack grows with the stage (up to 6 at once)
-    const packSize = Math.min(6, 1 + Math.floor(this.stage / 4) + Math.floor(Math.random() * 2));
+    // Regular dive: single divers on stage 1, packs grow slowly (up to 6)
+    const packSize = Math.min(6,
+      1 + Math.floor((this.stage - 1) / 3) +
+      (this.stage >= 2 ? Math.floor(Math.random() * 2) : 0));
     const count = Math.min(eligible.length, packSize);
     const divers = shuffle(eligible).slice(0, count);
     for (const e of divers) {

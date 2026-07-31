@@ -86,7 +86,7 @@ export function drawEnemyBullet(ctx, cx, cy) {
   ctx.fillRect(cx - 1, cy - 3, 2, 6);
 }
 
-// Small life icon in the HUD
+// Life icon in the HUD (drawn at 2x scale for visibility)
 export function drawLifeIcon(ctx, x, y) {
   const p = [
     [0,0,1,0,1,0,0],
@@ -95,7 +95,7 @@ export function drawLifeIcon(ctx, x, y) {
     [1,1,1,1,1,1,1],
     [0,1,0,1,0,1,0],
   ];
-  drawPixelMap(ctx, p, x, y, { 1: '#fff', 2: '#f44' });
+  drawPixelMap(ctx, p, x, y, { 1: '#fff', 2: '#f44' }, 2);
 }
 
 // Draw a bonus fly — big diamond-winged ship with a glowing color

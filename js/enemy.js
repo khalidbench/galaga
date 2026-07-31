@@ -114,7 +114,8 @@ export class Enemy {
       this.state = 'returning';
       return;
     }
-    const speed = this.diveSpeed * Math.min(2.6, 1 + stageSpeed * 0.11);
+    // Stage 1 dives at base speed; ramps gently, capped late-game
+    const speed = this.diveSpeed * Math.min(2.4, 1 + (stageSpeed - 1) * 0.09);
     this.diveT = Math.min(1, this.diveT + speed * dt);
     const pos = evalCubicBezier(this.divePoints, this.diveT);
     this.x = pos.x;
@@ -204,7 +205,8 @@ export class Enemy {
     let dy = Math.max(ty - this.y, 80);
     if (Math.abs(dx) > dy) dx = Math.sign(dx) * dy; // clamp to 45°
     const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-    const speed = Math.min(340, 220 + stageSpeed * 6); // faster shots each stage
+    // Stage 1 shoots at base speed; ramps gently, capped late-game
+    const speed = Math.min(340, 200 + (stageSpeed - 1) * 7);
     const b = new Bullet(this.x, this.y, (dy / dist) * speed, false);
     b.vx = (dx / dist) * speed;
     this.bullets.push(b);

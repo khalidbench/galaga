@@ -295,9 +295,9 @@ export class Game {
     this._p1Timer = (this.stage >= 8 && !this.isBonus)
       ? 8 + Math.random() * 10 : Infinity;
 
-    // Incident events: from stage 4 (skip bonus rounds), one per stage
+    // Incident events: from stage 5 (skip bonus rounds), one per stage
     this._endIncident();
-    this._incidentTimer = (this.stage >= 4 && !this.isBonus)
+    this._incidentTimer = (this.stage >= 5 && !this.isBonus)
       ? 6 + Math.random() * 8 : Infinity;
   }
 
@@ -595,18 +595,27 @@ export class Game {
   _renderScorePops(ctx) {
     ctx.save();
     ctx.textAlign = 'center';
+    // Big banners render in fixed stacked slots so simultaneous
+    // announcements never overlap each other
+    let bannerSlot = 0;
     for (const p of this._scorePops) {
       const fade = Math.min(1, p.timer / 0.4);
       ctx.globalAlpha = fade;
 
       if (p.big) {
-        // Triple-kill banner — big, centred horizontally, glowing
-        const yOff = (2.0 - p.timer) * 24;
-        ctx.font = 'bold 16px "Press Start 2P", monospace';
+        // Auto-shrink very long banner text to fit the canvas
+        let size = 16;
+        ctx.font = 'bold ' + size + 'px "Press Start 2P", monospace';
+        while (size > 9 && ctx.measureText(p.text).width > CANVAS_W - 16) {
+          size--;
+          ctx.font = 'bold ' + size + 'px "Press Start 2P", monospace';
+        }
+        const y = 110 + bannerSlot * 30;
+        bannerSlot++;
         ctx.shadowColor = p.color;
         ctx.shadowBlur = 10;
         ctx.fillStyle = p.color;
-        ctx.fillText(p.text, CANVAS_W / 2, Math.max(80, p.y - yOff));
+        ctx.fillText(p.text, CANVAS_W / 2, y);
         ctx.shadowBlur = 0;
       } else {
         const yOff = (1.2 - p.timer) * 30;
