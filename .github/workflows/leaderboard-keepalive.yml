@@ -22,7 +22,10 @@ jobs:
           set -e
           API=$(jq -r .api leaderboard-config.json)
           echo "Store: $API"
-          DATA=$(curl -sfL "$API")
+          # No -f: Apps Script /exec redirects through a hop that -f treats
+          # as an error, though the final response is a clean 200. The jq
+          # check below is the real validation of the payload.
+          DATA=$(curl -sL "$API")
           if ! echo "$DATA" | jq -e '.scores' > /dev/null 2>&1; then
             echo "Store returned invalid data — keeping previous backup" >&2
             exit 0
