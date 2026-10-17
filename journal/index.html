@@ -1,0 +1,890 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Journal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=EB+Garamond:ital,wght@0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f7f3ec; --ink:#2b2520; --muted:#8d8172; --faint:#b5aa9a;
+  --line:rgba(43,37,32,.12); --accent:#a0633a; --card:#fffdf9;
+  --shadow:0 10px 40px rgba(43,37,32,.08);
+  --overlay:rgba(24,20,17,.55);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#161310; --ink:#e9e1d4; --muted:#9a8e7d; --faint:#6b6154;
+    --line:rgba(233,225,212,.12); --accent:#cf9064; --card:#1e1a16;
+    --shadow:0 10px 40px rgba(0,0,0,.35);
+    --overlay:rgba(0,0,0,.65);
+  }
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+html,body{margin:0; padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:"EB Garamond", Georgia, serif;
+  font-size:19px; line-height:1.72;
+  min-height:100dvh;
+}
+::selection{background:var(--accent); color:var(--bg)}
+
+/* ---------- login ---------- */
+#login{
+  position:fixed; inset:0; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:0; background:var(--bg);
+  z-index:50; padding:24px; transition:opacity .6s ease;
+}
+#login.hidden{opacity:0; pointer-events:none}
+.monogram{
+  width:64px; height:64px; border:1px solid var(--line); border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-family:"Cormorant Garamond", serif; font-style:italic; font-size:30px;
+  color:var(--accent); margin-bottom:26px;
+}
+.login-title{
+  font-family:"Cormorant Garamond", serif; font-weight:500; font-size:30px;
+  letter-spacing:.04em; margin:0 0 6px;
+}
+.login-sub{color:var(--muted); font-style:italic; font-size:17px; margin:0 0 40px}
+.pw-wrap{display:flex; flex-direction:column; align-items:center; width:min(320px,80vw)}
+#pw{
+  width:100%; background:transparent; border:0; border-bottom:1px solid var(--line);
+  color:var(--ink); font-family:inherit; font-size:20px; text-align:center;
+  padding:10px 4px; outline:none; letter-spacing:.2em; transition:border-color .3s;
+}
+#pw:focus{border-color:var(--accent)}
+#pw::placeholder{letter-spacing:.08em; color:var(--faint); font-style:italic}
+#loginBtn{
+  margin-top:34px; background:transparent; border:1px solid var(--line);
+  color:var(--ink); font-family:"Cormorant Garamond",serif; font-size:17px;
+  letter-spacing:.3em; text-transform:uppercase; padding:11px 36px 10px;
+  border-radius:40px; cursor:pointer; transition:all .3s;
+}
+#loginBtn:hover{border-color:var(--accent); color:var(--accent)}
+#loginBtn:disabled{opacity:.4; cursor:default}
+#loginErr{min-height:26px; margin-top:20px; color:#b3543e; font-style:italic; font-size:16px; text-align:center}
+.demo-note{position:fixed; bottom:20px; color:var(--faint); font-size:14px; font-style:italic; text-align:center; padding:0 20px}
+
+/* ---------- app ---------- */
+#app{display:none; opacity:0; transition:opacity .8s ease}
+#app.visible{display:block; opacity:1}
+.col{max-width:640px; margin:0 auto; padding:0 22px}
+
+header.masthead{
+  text-align:center; padding:58px 20px 20px;
+}
+.greeting{
+  color:var(--muted); font-style:italic; font-size:17px; letter-spacing:.05em; margin:0 0 10px;
+}
+.bigdate{
+  font-family:"Cormorant Garamond", serif; font-weight:500;
+  font-size:clamp(30px, 7vw, 42px); line-height:1.15; margin:0;
+}
+.clock{
+  margin-top:10px; color:var(--muted); font-size:16px;
+  letter-spacing:.42em; text-indent:.42em; font-variant-numeric:tabular-nums;
+}
+.clock .sec{opacity:.45; font-size:12px; letter-spacing:.2em}
+.rule{
+  width:56px; height:1px; background:var(--line); margin:30px auto 0; position:relative;
+}
+.rule::after{
+  content:"❧"; position:absolute; left:50%; top:50%; transform:translate(-50%,-52%);
+  background:var(--bg); padding:0 12px; color:var(--faint); font-size:14px;
+}
+
+main{padding:34px 0 110px}
+.post{margin:0 0 70px}
+.post-date{
+  color:var(--muted); font-size:15px; letter-spacing:.22em; text-transform:uppercase;
+  font-family:"Cormorant Garamond", serif; margin:0 0 14px;
+}
+.post-body p{margin:0 0 1em}
+.post-body p:last-child{margin-bottom:0}
+.post-body em{color:inherit}
+.edited-flag{color:var(--faint); font-size:14px; font-style:italic; margin-top:8px}
+
+.unread-divider{
+  display:flex; align-items:center; gap:16px; margin:0 0 56px; color:var(--accent);
+  font-style:italic; font-size:16px;
+}
+.unread-divider::before,.unread-divider::after{
+  content:""; flex:1; height:1px; background:var(--accent); opacity:.35;
+}
+
+/* photos */
+.photos{margin-top:22px; display:grid; gap:10px}
+.photos.n1{grid-template-columns:1fr}
+.photos.n2{grid-template-columns:1fr 1fr}
+.photos.many{grid-template-columns:1fr 1fr}
+.photos.many .ph:first-child{grid-column:1 / -1}
+.ph{
+  position:relative; border-radius:6px; overflow:hidden; background:var(--line);
+  cursor:pointer; min-height:90px;
+}
+.photos.n1 .ph img{width:100%; height:auto; max-height:76vh; object-fit:cover; display:block}
+.photos.n2 .ph, .photos.many .ph:not(:first-child){aspect-ratio:1/1}
+.photos.many .ph:first-child{aspect-ratio:3/2}
+.photos.n2 .ph img, .photos.many .ph img{width:100%; height:100%; object-fit:cover; display:block}
+.ph .shimmer{
+  position:absolute; inset:0;
+  background:linear-gradient(100deg, transparent 30%, rgba(255,255,255,.14) 50%, transparent 70%);
+  background-size:200% 100%; animation:sh 1.4s infinite;
+}
+@keyframes sh{0%{background-position:160% 0}100%{background-position:-60% 0}}
+.ph .cap{
+  position:absolute; left:0; right:0; bottom:0; padding:26px 14px 10px;
+  background:linear-gradient(transparent, rgba(0,0,0,.55));
+  color:#f4ede2; font-style:italic; font-size:15px; line-height:1.4;
+}
+
+footer.endmark{
+  text-align:center; color:var(--faint); padding:0 20px 56px; font-style:italic; font-size:15px;
+}
+footer.endmark .fleuron{font-size:20px; display:block; margin-bottom:14px; font-style:normal}
+#logoutLink{color:var(--faint); text-decoration:none; border-bottom:1px dotted var(--faint)}
+
+/* admin FAB */
+#adminFab{
+  position:fixed; right:22px; bottom:22px; width:48px; height:48px; border-radius:50%;
+  background:var(--card); border:1px solid var(--line); box-shadow:var(--shadow);
+  display:none; align-items:center; justify-content:center; cursor:pointer;
+  color:var(--muted); font-size:19px; z-index:30; transition:all .3s;
+}
+#adminFab:hover{color:var(--accent); border-color:var(--accent)}
+
+/* ---------- admin panel ---------- */
+#admin{
+  position:fixed; inset:0; z-index:40; background:var(--bg); display:none;
+  overflow-y:auto; -webkit-overflow-scrolling:touch;
+}
+#admin.open{display:block}
+.admin-head{
+  position:sticky; top:0; background:var(--bg); z-index:5;
+  border-bottom:1px solid var(--line); padding:16px 0 0;
+}
+.admin-head .col{display:flex; flex-direction:column; gap:12px}
+.admin-title-row{display:flex; align-items:baseline; justify-content:space-between}
+.admin-title{font-family:"Cormorant Garamond",serif; font-size:24px; font-weight:600; margin:0}
+#adminClose{
+  background:none; border:0; color:var(--muted); font-size:15px; cursor:pointer;
+  font-family:inherit; font-style:italic; padding:4px;
+}
+.tabs{display:flex; gap:4px; overflow-x:auto}
+.tab{
+  background:none; border:0; border-bottom:2px solid transparent; color:var(--muted);
+  font-family:"Cormorant Garamond",serif; font-size:17px; letter-spacing:.12em;
+  text-transform:uppercase; padding:8px 14px 10px; cursor:pointer; white-space:nowrap;
+}
+.tab.active{color:var(--accent); border-bottom-color:var(--accent)}
+.admin-body{padding:26px 0 90px; font-size:17px}
+.admin-body .hint{color:var(--muted); font-style:italic; font-size:15px; margin:0 0 18px}
+
+/* composer */
+#composerText{
+  width:100%; min-height:170px; background:var(--card); border:1px solid var(--line);
+  border-radius:8px; color:var(--ink); font-family:inherit; font-size:19px; line-height:1.7;
+  padding:16px 18px; outline:none; resize:vertical;
+}
+#composerText:focus{border-color:var(--accent)}
+.composer-tools{display:flex; align-items:center; gap:14px; margin-top:14px; flex-wrap:wrap}
+.btn{
+  background:transparent; border:1px solid var(--line); color:var(--ink);
+  font-family:"Cormorant Garamond",serif; font-size:16px; letter-spacing:.18em;
+  text-transform:uppercase; padding:9px 22px 8px; border-radius:30px; cursor:pointer;
+  transition:all .25s;
+}
+.btn:hover{border-color:var(--accent); color:var(--accent)}
+.btn.primary{background:var(--accent); border-color:var(--accent); color:var(--bg)}
+.btn.primary:hover{opacity:.88; color:var(--bg)}
+.btn:disabled{opacity:.4; cursor:default}
+.btn.danger{color:#b3543e; border-color:rgba(179,84,62,.4)}
+#photoPicks{display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:12px; margin-top:16px}
+.pick{position:relative}
+.pick img{width:100%; aspect-ratio:1/1; object-fit:cover; border-radius:6px; display:block}
+.pick input{
+  width:100%; margin-top:6px; background:transparent; border:0; border-bottom:1px solid var(--line);
+  color:var(--ink); font-family:inherit; font-style:italic; font-size:14px; padding:3px 2px; outline:none;
+}
+.pick .rm{
+  position:absolute; top:6px; right:6px; width:26px; height:26px; border-radius:50%;
+  background:rgba(0,0,0,.55); color:#fff; border:0; cursor:pointer; font-size:14px; line-height:1;
+}
+#composerStatus{margin-top:14px; font-style:italic; color:var(--muted); min-height:24px}
+
+/* lists */
+.mini-post{border-bottom:1px solid var(--line); padding:16px 0; display:flex; gap:14px; align-items:baseline}
+.mini-post .when{color:var(--muted); font-size:14px; white-space:nowrap; letter-spacing:.06em}
+.mini-post .snippet{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.mini-post .acts{display:flex; gap:12px}
+.mini-post .acts button{background:none;border:0;color:var(--accent);cursor:pointer;font-family:inherit;font-style:italic;font-size:15px;padding:0}
+.mini-post .acts button.del{color:#b3543e}
+
+.read-row{border-bottom:1px solid var(--line); padding:15px 0}
+.read-row .snippet{display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.read-row .meta{font-size:14.5px; margin-top:3px}
+.read-row .meta.ok{color:#5e7d52}
+.read-row .meta.no{color:var(--muted); font-style:italic}
+@media (prefers-color-scheme: dark){ .read-row .meta.ok{color:#8fae83} }
+
+table.logins{width:100%; border-collapse:collapse; font-size:14.5px}
+table.logins th{
+  text-align:left; color:var(--muted); font-weight:500; letter-spacing:.14em;
+  text-transform:uppercase; font-size:11.5px; padding:8px 8px 8px 0; border-bottom:1px solid var(--line);
+}
+table.logins td{padding:10px 8px 10px 0; border-bottom:1px solid var(--line); vertical-align:top}
+table.logins .fail{color:#b3543e}
+table.logins .okk{color:#5e7d52}
+@media (prefers-color-scheme: dark){ table.logins .okk{color:#8fae83} }
+
+/* lightbox */
+#lightbox{
+  position:fixed; inset:0; z-index:60; background:rgba(10,8,6,.93); display:none;
+  flex-direction:column; align-items:center; justify-content:center; touch-action:pan-y;
+}
+#lightbox.open{display:flex}
+#lbImg{max-width:96vw; max-height:82vh; object-fit:contain; border-radius:4px}
+#lbCap{color:#d9cfbf; font-style:italic; margin-top:14px; padding:0 24px; text-align:center; font-size:16px}
+#lbCount{color:#8d8172; font-size:13px; letter-spacing:.3em; margin-top:8px}
+#lbClose{
+  position:absolute; top:calc(14px + env(safe-area-inset-top)); right:18px; background:none; border:0; color:#d9cfbf;
+  font-size:30px; cursor:pointer; line-height:1; padding:8px;
+}
+.lb-arrow{
+  position:absolute; top:50%; transform:translateY(-50%); background:none; border:0;
+  color:#d9cfbf; font-size:34px; cursor:pointer; padding:20px 14px; opacity:.7;
+}
+.lb-arrow:hover{opacity:1}
+#lbPrev{left:2px} #lbNext{right:2px}
+@media (max-width:640px){ .lb-arrow{display:none} }
+
+/* toast */
+#toast{
+  position:fixed; left:50%; bottom:30px; transform:translateX(-50%) translateY(20px);
+  background:var(--ink); color:var(--bg); font-size:15.5px; padding:11px 22px;
+  border-radius:30px; opacity:0; pointer-events:none; transition:all .35s; z-index:70;
+  max-width:86vw; text-align:center;
+}
+#toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+
+.spinner{
+  width:22px;height:22px;border:2px solid var(--line);border-top-color:var(--accent);
+  border-radius:50%;animation:spin .8s linear infinite;margin:40px auto;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- ======== LOGIN ======== -->
+<div id="login">
+  <div class="monogram">J</div>
+  <h1 class="login-title">Journal</h1>
+  <p class="login-sub">these pages are kept for one reader</p>
+  <div class="pw-wrap">
+    <input id="pw" type="password" placeholder="password" autocomplete="current-password" enterkeyhint="go">
+    <button id="loginBtn">Enter</button>
+    <div id="loginErr"></div>
+  </div>
+  <div class="demo-note" id="demoNote" style="display:none">backend not configured yet — type <b>demo</b> to preview</div>
+</div>
+
+<!-- ======== APP ======== -->
+<div id="app">
+  <header class="masthead">
+    <p class="greeting" id="greeting"></p>
+    <h2 class="bigdate" id="bigdate"></h2>
+    <div class="clock" id="clock"></div>
+    <div class="rule"></div>
+  </header>
+
+  <main class="col" id="feed"></main>
+
+  <footer class="endmark">
+    <span class="fleuron">❦</span>
+    <span>you have reached the beginning · <a href="#" id="logoutLink">leave quietly</a></span>
+  </footer>
+</div>
+
+<div id="adminFab" title="">✎</div>
+
+<!-- ======== ADMIN ======== -->
+<div id="admin">
+  <div class="admin-head">
+    <div class="col">
+      <div class="admin-title-row">
+        <h3 class="admin-title">The desk</h3>
+        <button id="adminClose">return to the journal</button>
+      </div>
+      <div class="tabs">
+        <button class="tab active" data-tab="write">Write</button>
+        <button class="tab" data-tab="posts">Posts</button>
+        <button class="tab" data-tab="reads">Reads</button>
+        <button class="tab" data-tab="logins">Logins</button>
+      </div>
+    </div>
+  </div>
+  <div class="admin-body col">
+
+    <section data-pane="write">
+      <p class="hint" id="composerMode">A new entry. Use blank lines for paragraphs, **bold** and *italics* if you like.</p>
+      <textarea id="composerText" placeholder="What did you see today…"></textarea>
+      <div id="photoPicks"></div>
+      <div class="composer-tools">
+        <input id="photoInput" type="file" accept="image/*" multiple hidden>
+        <button class="btn" id="addPhotosBtn">Add photos</button>
+        <button class="btn primary" id="publishBtn">Publish</button>
+        <button class="btn" id="cancelEditBtn" style="display:none">Cancel edit</button>
+      </div>
+      <div id="composerStatus"></div>
+    </section>
+
+    <section data-pane="posts" style="display:none">
+      <p class="hint">Every entry. Edit opens it at the writing desk.</p>
+      <div id="postsList"></div>
+    </section>
+
+    <section data-pane="reads" style="display:none">
+      <p class="hint">What Salima has read, and when.</p>
+      <div id="readsList"><div class="spinner"></div></div>
+    </section>
+
+    <section data-pane="logins" style="display:none">
+      <p class="hint">Every time the door was opened — or someone tried the handle.</p>
+      <div id="loginsList"><div class="spinner"></div></div>
+    </section>
+
+  </div>
+</div>
+
+<!-- ======== LIGHTBOX ======== -->
+<div id="lightbox">
+  <button id="lbClose">×</button>
+  <button class="lb-arrow" id="lbPrev">‹</button>
+  <img id="lbImg" alt="">
+  <button class="lb-arrow" id="lbNext">›</button>
+  <div id="lbCap"></div>
+  <div id="lbCount"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ================= CONFIG ================= */
+const CONFIG = {
+  // Paste your Google Apps Script web-app URL here (see SETUP.md)
+  SCRIPT_URL: "",
+  TITLE: "Journal"
+};
+
+/* ================= STATE ================= */
+const $ = id => document.getElementById(id);
+let auth = null;            // {token, account}
+let posts = [];             // [{id, created, updated, text, photos:[{id, caption}]}]
+let photoCache = {};        // photoId -> dataURL
+let editingId = null;       // post id being edited
+let composerPhotos = [];    // [{id?, data?, caption, preview}]
+let lbItems = [], lbIndex = 0;
+let readReported = {};
+const DEMO = !CONFIG.SCRIPT_URL;
+
+/* ================= HELPERS ================= */
+function toast(msg, ms=2600){
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._tm); t._tm = setTimeout(()=>t.classList.remove("show"), ms);
+}
+function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function renderText(t){
+  let h = esc(t.trim());
+  h = h.replace(/\*\*([^*\n][\s\S]*?)\*\*/g, "<strong>$1</strong>");
+  h = h.replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>");
+  return h.split(/\n\s*\n/).map(p => "<p>" + p.replace(/\n/g,"<br>") + "</p>").join("");
+}
+function fmtDateTime(iso){
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-GB",{weekday:"long", day:"numeric", month:"long", year:"numeric"}) +
+    " · " + d.toLocaleTimeString("en-GB",{hour:"2-digit", minute:"2-digit"});
+}
+function fmtShort(iso){
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-GB",{day:"numeric", month:"short", year:"numeric"}) +
+    " " + d.toLocaleTimeString("en-GB",{hour:"2-digit", minute:"2-digit"});
+}
+function deviceLabel(){
+  const ua = navigator.userAgent;
+  let os = "Unknown";
+  if (/iPhone/.test(ua)) os = "iPhone";
+  else if (/iPad/.test(ua)) os = "iPad";
+  else if (/Android/.test(ua)) os = "Android";
+  else if (/Mac/.test(ua)) os = "Mac";
+  else if (/Windows/.test(ua)) os = "Windows";
+  else if (/Linux/.test(ua)) os = "Linux";
+  let br = "Browser";
+  if (/Edg\//.test(ua)) br = "Edge";
+  else if (/Chrome\//.test(ua) && !/Chromium/.test(ua)) br = "Chrome";
+  else if (/Firefox\//.test(ua)) br = "Firefox";
+  else if (/Safari\//.test(ua)) br = "Safari";
+  return os + " · " + br;
+}
+async function ipInfo(){
+  try{
+    const ctl = new AbortController(); setTimeout(()=>ctl.abort(), 4500);
+    const r = await fetch("https://ipapi.co/json/", {signal: ctl.signal});
+    const j = await r.json();
+    return { ip: j.ip||"", city: j.city||"", country: j.country_name||"" };
+  }catch(e){ return { ip:"", city:"", country:"" }; }
+}
+
+/* ================= API ================= */
+async function api(action, payload={}, opts={}){
+  if (DEMO) return demoApi(action, payload);
+  const body = JSON.stringify(Object.assign({action, token: auth && auth.token}, payload));
+  const res = await fetch(CONFIG.SCRIPT_URL, {method:"POST", body});
+  if (!res.ok) throw new Error("network");
+  const j = await res.json();
+  if (!j.ok){
+    if (j.error === "auth" && !opts.noKick){ hardLogout(); toast("Your session ended — please sign in again."); }
+    throw new Error(j.error || "error");
+  }
+  return j;
+}
+
+/* ================= DEMO BACKEND (only when SCRIPT_URL is empty) ================= */
+const demoPosts = [
+  { id:"d1", created:new Date(Date.now()-3600e3*4).toISOString(), updated:"", text:"Tonight the sky over the lake turned the colour of apricots, and I stood there longer than I meant to.\n\nI thought of you, of course. I usually do when something is too beautiful to keep to myself.", photos:[{id:"p1",caption:"the lake, just before dark"}] },
+  { id:"d2", created:new Date(Date.now()-86400e3*2).toISOString(), updated:"", text:"A small thing: the bakery on the corner started selling *kanelbullar* again. The first batch of autumn. I bought two and ate both, and I am **not sorry**.", photos:[{id:"p2",caption:""},{id:"p3",caption:"evidence"}] },
+  { id:"d3", created:new Date(Date.now()-86400e3*6).toISOString(), updated:"", text:"Started this journal today. A quiet place to put the things I see and think, so that one person in particular can find them.\n\nWelcome, if you are reading this.", photos:[] },
+];
+const demoPhotoUrls = { p1:"https://picsum.photos/id/1016/1200/800", p2:"https://picsum.photos/id/312/900/900", p3:"https://picsum.photos/id/1080/900/900" };
+async function demoApi(action, p){
+  await new Promise(r=>setTimeout(r, 350));
+  if (action === "login"){
+    const pw = (p.password||"").toLowerCase();
+    if (pw === "demo") return {ok:true, token:"demo", account:"admin"};
+    if (pw === "salima") return {ok:true, token:"demo", account:"salima"};
+    throw new Error("wrong");
+  }
+  if (action === "getPosts") return {ok:true, posts: demoPosts};
+  if (action === "getPhoto"){
+    const r = await fetch(demoPhotoUrls[p.photoId]); const b = await r.blob();
+    const data = await new Promise(res=>{const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(b);});
+    return {ok:true, data};
+  }
+  if (action === "addPost"){
+    demoPosts.unshift({id:"d"+Math.random(), created:new Date().toISOString(), updated:"", text:p.text, photos:[]});
+    return {ok:true};
+  }
+  if (action === "updatePost"){
+    const post = demoPosts.find(x=>x.id===p.id); if (post){ post.text = p.text; post.updated = new Date().toISOString(); }
+    return {ok:true};
+  }
+  if (action === "deletePost"){
+    const i = demoPosts.findIndex(x=>x.id===p.id); if (i>=0) demoPosts.splice(i,1);
+    return {ok:true};
+  }
+  if (action === "markRead") return {ok:true};
+  if (action === "adminData") return {ok:true,
+    reads:[{postId:"d3", account:"salima", time:new Date(Date.now()-86400e3*5).toISOString(), device:"iPhone · Safari"}],
+    logins:[
+      {time:new Date(Date.now()-3600e3).toISOString(), account:"admin", success:true, ip:"—", city:"Stockholm", country:"Sweden", device:"Mac · Chrome"},
+      {time:new Date(Date.now()-86400e3*5).toISOString(), account:"salima", success:true, ip:"—", city:"Göteborg", country:"Sweden", device:"iPhone · Safari"},
+      {time:new Date(Date.now()-86400e3*5.1).toISOString(), account:"", success:false, ip:"—", city:"Göteborg", country:"Sweden", device:"iPhone · Safari"},
+    ]};
+  return {ok:true};
+}
+
+/* ================= LOGIN ================= */
+async function doLogin(){
+  const pw = $("pw").value;
+  if (!pw) return;
+  $("loginBtn").disabled = true; $("loginErr").textContent = "";
+  try{
+    const info = DEMO ? {} : await ipInfo();
+    const j = await api("login", {password: pw, ip: info.ip, city: info.city, country: info.country, device: deviceLabel(), userAgent: navigator.userAgent}, {noKick:true});
+    auth = {token: j.token, account: j.account};
+    try{ localStorage.setItem("journal_auth", JSON.stringify(auth)); }catch(e){}
+    $("pw").value = "";
+    enterApp();
+  }catch(e){
+    $("loginErr").textContent = e.message === "wrong" ? "that is not the word — try again" : "could not reach the journal — try again";
+  }
+  $("loginBtn").disabled = false;
+}
+function hardLogout(){
+  auth = null; try{ localStorage.removeItem("journal_auth"); }catch(e){}
+  $("app").classList.remove("visible");
+  setTimeout(()=>{ $("app").style.display="none"; }, 100);
+  $("admin").classList.remove("open");
+  $("adminFab").style.display = "none";
+  $("login").classList.remove("hidden");
+}
+
+/* ================= CLOCK ================= */
+function tickClock(){
+  const now = new Date();
+  const h = now.getHours();
+  let g = "Good evening";
+  if (h < 5) g = "A late hour";
+  else if (h < 12) g = "Good morning";
+  else if (h < 18) g = "Good afternoon";
+  $("greeting").textContent = g + (auth && auth.account === "salima" ? ", Salima" : "");
+  $("bigdate").textContent = now.toLocaleDateString("en-GB", {weekday:"long", day:"numeric", month:"long"});
+  const hh = String(now.getHours()).padStart(2,"0");
+  const mm = String(now.getMinutes()).padStart(2,"0");
+  const ss = String(now.getSeconds()).padStart(2,"0");
+  $("clock").innerHTML = hh + ":" + mm + ' <span class="sec">' + ss + "</span>";
+}
+
+/* ================= FEED ================= */
+async function enterApp(){
+  $("login").classList.add("hidden");
+  $("app").style.display = "block";
+  requestAnimationFrame(()=>$("app").classList.add("visible"));
+  tickClock(); clearInterval(window._ck); window._ck = setInterval(tickClock, 1000);
+  if (auth.account === "admin") $("adminFab").style.display = "flex";
+  $("feed").innerHTML = '<div class="spinner"></div>';
+  try{
+    const j = await api("getPosts");
+    posts = j.posts || [];
+    renderFeed();
+  }catch(e){
+    $("feed").innerHTML = '<p style="text-align:center;color:var(--muted);font-style:italic">The journal could not be opened just now. Pull to refresh, or try again in a moment.</p>';
+  }
+}
+function lastVisitKey(){ return "journal_lastvisit_" + auth.account; }
+function renderFeed(){
+  const feed = $("feed"); feed.innerHTML = "";
+  let lastVisit = 0;
+  try{ lastVisit = Number(localStorage.getItem(lastVisitKey()) || 0); }catch(e){}
+  const sorted = posts.slice().sort((a,b)=> new Date(b.created) - new Date(a.created));
+  let dividerPlaced = !lastVisit;
+  sorted.forEach((p, idx)=>{
+    const isNew = lastVisit && new Date(p.created).getTime() > lastVisit;
+    if (!dividerPlaced && !isNew && idx > 0){
+      const div = document.createElement("div");
+      div.className = "unread-divider";
+      div.textContent = "new since your last visit, above";
+      feed.appendChild(div);
+      dividerPlaced = true;
+    }
+    if (!isNew) dividerPlaced = true;
+    feed.appendChild(postEl(p));
+  });
+  if (!sorted.length){
+    feed.innerHTML = '<p style="text-align:center;color:var(--muted);font-style:italic">Nothing written yet. The first page is still blank.</p>';
+  }
+  try{ localStorage.setItem(lastVisitKey(), String(Date.now())); }catch(e){}
+  observePhotos();
+  if (auth.account === "salima") observeReads();
+}
+function postEl(p){
+  const art = document.createElement("article");
+  art.className = "post"; art.dataset.id = p.id;
+  let photosHtml = "";
+  if (p.photos && p.photos.length){
+    const cls = p.photos.length === 1 ? "n1" : p.photos.length === 2 ? "n2" : "many";
+    photosHtml = '<div class="photos ' + cls + '">' + p.photos.map((ph,i)=>
+      '<div class="ph" data-photo="' + ph.id + '" data-idx="' + i + '"><div class="shimmer"></div>' +
+      (ph.caption ? '<div class="cap">' + esc(ph.caption) + "</div>" : "") + "</div>"
+    ).join("") + "</div>";
+  }
+  art.innerHTML =
+    '<p class="post-date">' + fmtDateTime(p.created) + "</p>" +
+    '<div class="post-body">' + renderText(p.text) + "</div>" + photosHtml +
+    (p.updated ? '<div class="edited-flag">edited ' + fmtShort(p.updated) + "</div>" : "");
+  art.querySelectorAll(".ph").forEach(el=>{
+    el.addEventListener("click", ()=> openLightbox(p, Number(el.dataset.idx)));
+  });
+  return art;
+}
+
+/* ---- lazy photo loading ---- */
+async function loadPhoto(photoId){
+  if (photoCache[photoId]) return photoCache[photoId];
+  const j = await api("getPhoto", {photoId});
+  photoCache[photoId] = j.data;
+  return j.data;
+}
+function observePhotos(){
+  const io = new IntersectionObserver(entries=>{
+    entries.forEach(async en=>{
+      if (!en.isIntersecting) return;
+      io.unobserve(en.target);
+      const id = en.target.dataset.photo;
+      try{
+        const data = await loadPhoto(id);
+        const img = new Image();
+        img.onload = ()=>{
+          en.target.querySelector(".shimmer")?.remove();
+          en.target.prepend(img);
+        };
+        img.src = data;
+      }catch(e){ /* leave shimmer */ }
+    });
+  }, {rootMargin:"600px"});
+  document.querySelectorAll(".ph").forEach(el=>io.observe(el));
+}
+
+/* ---- read receipts (Salima only) ---- */
+function observeReads(){
+  try{ readReported = JSON.parse(localStorage.getItem("journal_reads")||"{}"); }catch(e){ readReported = {}; }
+  const timers = {};
+  const io = new IntersectionObserver(entries=>{
+    entries.forEach(en=>{
+      const id = en.target.dataset.id;
+      if (readReported[id]) return;
+      if (en.isIntersecting){
+        timers[id] = setTimeout(async ()=>{
+          readReported[id] = true;
+          try{ localStorage.setItem("journal_reads", JSON.stringify(readReported)); }catch(e){}
+          try{ await api("markRead", {postId: id, device: deviceLabel()}); }catch(e){ delete readReported[id]; }
+        }, 2200);
+      }else{
+        clearTimeout(timers[id]);
+      }
+    });
+  }, {threshold: 0.45});
+  document.querySelectorAll(".post").forEach(el=>io.observe(el));
+}
+
+/* ================= LIGHTBOX ================= */
+async function openLightbox(post, idx){
+  lbItems = post.photos; lbIndex = idx;
+  $("lightbox").classList.add("open");
+  document.body.style.overflow = "hidden";
+  showLb();
+}
+async function showLb(){
+  const ph = lbItems[lbIndex];
+  $("lbCap").textContent = ph.caption || "";
+  $("lbCount").textContent = lbItems.length > 1 ? (lbIndex+1) + " / " + lbItems.length : "";
+  $("lbImg").src = "";
+  try{ $("lbImg").src = await loadPhoto(ph.id); }catch(e){}
+}
+function closeLb(){ $("lightbox").classList.remove("open"); document.body.style.overflow = ""; }
+function lbStep(d){ lbIndex = (lbIndex + d + lbItems.length) % lbItems.length; showLb(); }
+
+/* ================= ADMIN ================= */
+function openAdmin(){ $("admin").classList.add("open"); document.body.style.overflow = "hidden"; }
+function closeAdmin(){ $("admin").classList.remove("open"); document.body.style.overflow = ""; }
+function switchTab(name){
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active", t.dataset.tab === name));
+  document.querySelectorAll("[data-pane]").forEach(p=>p.style.display = p.dataset.pane === name ? "" : "none");
+  if (name === "posts") renderPostsList();
+  if (name === "reads") renderReads();
+  if (name === "logins") renderLogins();
+}
+
+/* ---- composer ---- */
+function resetComposer(){
+  editingId = null; composerPhotos = [];
+  $("composerText").value = "";
+  $("composerMode").textContent = "A new entry. Use blank lines for paragraphs, **bold** and *italics* if you like.";
+  $("cancelEditBtn").style.display = "none";
+  $("publishBtn").textContent = "Publish";
+  renderPicks(); saveDraft();
+}
+function saveDraft(){
+  if (editingId) return;
+  try{ localStorage.setItem("journal_draft", $("composerText").value); }catch(e){}
+}
+function loadDraft(){
+  try{ const d = localStorage.getItem("journal_draft"); if (d) $("composerText").value = d; }catch(e){}
+}
+function renderPicks(){
+  const box = $("photoPicks"); box.innerHTML = "";
+  composerPhotos.forEach((ph, i)=>{
+    const div = document.createElement("div"); div.className = "pick";
+    const img = document.createElement("img"); img.src = ph.preview || ph.data || "";
+    if (!img.src && ph.id){ loadPhoto(ph.id).then(d=>{ img.src = d; }).catch(()=>{}); }
+    const cap = document.createElement("input"); cap.placeholder = "caption (optional)"; cap.value = ph.caption || "";
+    cap.addEventListener("input", ()=>{ ph.caption = cap.value; });
+    const rm = document.createElement("button"); rm.className = "rm"; rm.textContent = "×";
+    rm.addEventListener("click", ()=>{ composerPhotos.splice(i,1); renderPicks(); });
+    div.append(img, rm, cap); box.appendChild(div);
+  });
+}
+function compressImage(file){
+  return new Promise((resolve, reject)=>{
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = ()=>{
+      const MAX = 1600;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (Math.max(w,h) > MAX){ const k = MAX / Math.max(w,h); w = Math.round(w*k); h = Math.round(h*k); }
+      const c = document.createElement("canvas"); c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL("image/jpeg", 0.82));
+    };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error("bad image")); };
+    img.src = url;
+  });
+}
+async function pickPhotos(files){
+  for (const f of files){
+    try{
+      const data = await compressImage(f);
+      composerPhotos.push({data, caption:"", preview:data});
+    }catch(e){ toast("Could not read one of the images."); }
+  }
+  renderPicks();
+}
+async function publish(){
+  const text = $("composerText").value.trim();
+  if (!text && !composerPhotos.length){ toast("Write something first."); return; }
+  $("publishBtn").disabled = true;
+  $("composerStatus").textContent = composerPhotos.some(p=>p.data) ? "Sending — photos take a few seconds…" : "Sending…";
+  try{
+    const photos = composerPhotos.map(p=> p.id ? {id:p.id, caption:p.caption||""} : {data:p.data, caption:p.caption||""});
+    if (editingId) await api("updatePost", {id: editingId, text, photos});
+    else await api("addPost", {text, photos});
+    try{ localStorage.removeItem("journal_draft"); }catch(e){}
+    resetComposer();
+    $("composerStatus").textContent = "";
+    toast(editingId ? "Entry updated." : "Published.");
+    const j = await api("getPosts"); posts = j.posts || []; renderFeed();
+  }catch(e){
+    $("composerStatus").textContent = "That did not go through — nothing was lost, try Publish again.";
+  }
+  $("publishBtn").disabled = false;
+}
+function startEdit(p){
+  editingId = p.id;
+  $("composerText").value = p.text;
+  composerPhotos = (p.photos||[]).map(ph=>({id:ph.id, caption:ph.caption||""}));
+  renderPicks();
+  $("composerMode").textContent = "Editing the entry from " + fmtShort(p.created) + ".";
+  $("cancelEditBtn").style.display = "";
+  $("publishBtn").textContent = "Save changes";
+  switchTab("write");
+  $("admin").scrollTo({top:0});
+}
+
+/* ---- posts list ---- */
+function renderPostsList(){
+  const box = $("postsList"); box.innerHTML = "";
+  const sorted = posts.slice().sort((a,b)=> new Date(b.created) - new Date(a.created));
+  if (!sorted.length){ box.innerHTML = '<p class="hint">No entries yet.</p>'; return; }
+  sorted.forEach(p=>{
+    const row = document.createElement("div"); row.className = "mini-post";
+    const snippet = (p.text || "(photos)").replace(/\s+/g," ").slice(0, 80);
+    row.innerHTML = '<span class="when">' + fmtShort(p.created) + '</span><span class="snippet">' + esc(snippet) + "</span>";
+    const acts = document.createElement("span"); acts.className = "acts";
+    const ed = document.createElement("button"); ed.textContent = "edit"; ed.addEventListener("click", ()=>startEdit(p));
+    const del = document.createElement("button"); del.textContent = "delete"; del.className = "del";
+    del.addEventListener("click", async ()=>{
+      if (!confirm("Delete this entry for good? Its photos go with it.")) return;
+      try{
+        await api("deletePost", {id: p.id});
+        posts = posts.filter(x=>x.id !== p.id);
+        renderPostsList(); renderFeed(); toast("Entry deleted.");
+      }catch(e){ toast("Could not delete — try again."); }
+    });
+    acts.append(ed, del); row.appendChild(acts);
+    box.appendChild(row);
+  });
+}
+
+/* ---- reads & logins ---- */
+let adminData = null;
+async function fetchAdminData(force){
+  if (adminData && !force) return adminData;
+  adminData = await api("adminData");
+  return adminData;
+}
+async function renderReads(){
+  const box = $("readsList"); box.innerHTML = '<div class="spinner"></div>';
+  try{
+    const d = await fetchAdminData(true);
+    const reads = {};
+    (d.reads||[]).forEach(r=>{ if (r.account === "salima" && !reads[r.postId]) reads[r.postId] = r; });
+    const sorted = posts.slice().sort((a,b)=> new Date(b.created) - new Date(a.created));
+    box.innerHTML = "";
+    if (!sorted.length){ box.innerHTML = '<p class="hint">No entries yet.</p>'; return; }
+    let readCount = 0;
+    sorted.forEach(p=>{
+      const r = reads[p.id]; if (r) readCount++;
+      const row = document.createElement("div"); row.className = "read-row";
+      const snippet = (p.text || "(photos)").replace(/\s+/g," ").slice(0, 90);
+      row.innerHTML = '<span class="snippet">' + esc(snippet) + "</span>" +
+        (r ? '<div class="meta ok">✓ read ' + fmtShort(r.time) + (r.device ? " — " + esc(r.device) : "") + "</div>"
+           : '<div class="meta no">○ not yet read</div>');
+      box.appendChild(row);
+    });
+    const sum = document.createElement("p"); sum.className = "hint"; sum.style.marginTop = "18px";
+    sum.textContent = readCount + " of " + sorted.length + " entries read.";
+    box.appendChild(sum);
+  }catch(e){ box.innerHTML = '<p class="hint">Could not load read receipts.</p>'; }
+}
+async function renderLogins(){
+  const box = $("loginsList"); box.innerHTML = '<div class="spinner"></div>';
+  try{
+    const d = await fetchAdminData(true);
+    const rows = (d.logins||[]).slice().sort((a,b)=> new Date(b.time) - new Date(a.time));
+    if (!rows.length){ box.innerHTML = '<p class="hint">No logins recorded yet.</p>'; return; }
+    let html = '<table class="logins"><tr><th>When</th><th>Who</th><th>From</th><th>Device</th></tr>';
+    rows.forEach(r=>{
+      const where = [r.city, r.country].filter(Boolean).join(", ") || "—";
+      html += "<tr><td>" + fmtShort(r.time) + "</td><td class=\"" + (r.success ? "okk" : "fail") + "\">" +
+        (r.success ? esc(r.account) : "failed try") + "</td><td>" + esc(where) +
+        (r.ip ? '<br><span style="color:var(--faint);font-size:12px">' + esc(r.ip) + "</span>" : "") +
+        "</td><td>" + esc(r.device||"—") + "</td></tr>";
+    });
+    html += "</table>";
+    box.innerHTML = html;
+  }catch(e){ box.innerHTML = '<p class="hint">Could not load the login log.</p>'; }
+}
+
+/* ================= WIRES ================= */
+$("loginBtn").addEventListener("click", doLogin);
+$("pw").addEventListener("keydown", e=>{ if (e.key === "Enter") doLogin(); });
+$("logoutLink").addEventListener("click", async e=>{
+  e.preventDefault();
+  try{ await api("logout"); }catch(err){}
+  hardLogout();
+});
+$("adminFab").addEventListener("click", openAdmin);
+$("adminClose").addEventListener("click", closeAdmin);
+document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click", ()=>switchTab(t.dataset.tab)));
+$("addPhotosBtn").addEventListener("click", ()=>$("photoInput").click());
+$("photoInput").addEventListener("change", e=>{ pickPhotos([...e.target.files]); e.target.value = ""; });
+$("publishBtn").addEventListener("click", publish);
+$("cancelEditBtn").addEventListener("click", ()=>{ resetComposer(); loadDraft(); });
+$("composerText").addEventListener("input", saveDraft);
+$("lbClose").addEventListener("click", closeLb);
+$("lbPrev").addEventListener("click", ()=>lbStep(-1));
+$("lbNext").addEventListener("click", ()=>lbStep(1));
+$("lightbox").addEventListener("click", e=>{ if (e.target === $("lightbox")) closeLb(); });
+document.addEventListener("keydown", e=>{
+  if (!$("lightbox").classList.contains("open")) return;
+  if (e.key === "Escape") closeLb();
+  if (e.key === "ArrowLeft") lbStep(-1);
+  if (e.key === "ArrowRight") lbStep(1);
+});
+let touchX = null;
+$("lightbox").addEventListener("touchstart", e=>{ touchX = e.touches[0].clientX; }, {passive:true});
+$("lightbox").addEventListener("touchend", e=>{
+  if (touchX === null) return;
+  const dx = e.changedTouches[0].clientX - touchX;
+  if (Math.abs(dx) > 50) lbStep(dx > 0 ? -1 : 1);
+  touchX = null;
+}, {passive:true});
+
+/* ================= BOOT ================= */
+(function(){
+  if (DEMO) $("demoNote").style.display = "block";
+  loadDraft();
+  try{
+    const saved = localStorage.getItem("journal_auth");
+    if (saved){ auth = JSON.parse(saved); enterApp(); return; }
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
